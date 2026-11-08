@@ -5,3 +5,10 @@
 test/fixtures/screens/*.txt text eol=lf
 examples/container/Dockerfile text eol=lf
 examples/container/*.yaml text eol=lf
+# biome checks these files with LF line endings: keep them LF on Windows checkouts too (CI runners and users with
+# core.autocrlf=true would otherwise fail biome format).
+*.ts text eol=lf
+*.js text eol=lf
+*.mjs text eol=lf
+*.json text eol=lf
+*.jsonc text eol=lf
