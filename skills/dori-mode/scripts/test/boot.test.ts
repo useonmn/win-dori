@@ -8,10 +8,10 @@ import {
   type Monitor,
   monitorCleanup,
   readMonitorManifests,
-  reconcilePanes,
   slackAuthCheck,
 } from "../src/boot.ts";
 import { shellQuote } from "../src/launch.ts";
+import { reconcilePanes } from "../src/reconcile.ts";
 import { Slack } from "../src/messenger/slack.ts";
 import { type Lane, type LaneStatus, Registry } from "../src/registry.ts";
 import { Reports } from "../src/reports.ts";
@@ -73,8 +73,8 @@ test("vanished, live and unassigned panes reconcile without mutating the lane re
   const before = JSON.stringify(lanes);
   // When reconciled against the live pane list.
   const result = reconcilePanes(lanes, [
-    { pane_id: "w2:p1", workspace_id: "w2" },
-    { pane_id: "w2:p2", workspace_id: "w2" },
+    { ref: { runtime: "herdr", id: "w2:p1", group: "w2" } },
+    { ref: { runtime: "herdr", id: "w2:p2", group: "w2" } },
   ]);
   // Then each lane is classified, unowned panes are listed, and the input is untouched.
   expect(result.lanes.map((l) => l.paneState)).toEqual(["vanished", "live", "unassigned"]);
@@ -442,7 +442,7 @@ test("a failed pane list stays unknown instead of declaring every lane vanished"
   // When boot runs; then it is incomplete and no lane is called vanished.
   const result = await bootCheck(failing);
   expect(result.exitCode).toBe(1);
-  expect(result.lines).toContain("PANES unavailable (herdr pane list failed)");
+  expect(result.lines).toContain("PANES unavailable (session list failed)");
   expect(result.lines.some((line) => line.startsWith("VANISHED"))).toBe(false);
 });
 
@@ -692,7 +692,7 @@ test("dori boot reads the current session's terminal metadata from PI_SESSION_DI
     `CLEANUP closed match=closed:command:key ownerSession=owner metadata=${shellQuote(join(fileDir, "b.json"))}`,
   );
   expect(out).toContain("SLACK skipped (DORI_SLACK_TOKEN not set)");
-  expect(out).toContain("PANES unavailable (herdr pane list failed)");
+  expect(out).toContain("PANES unavailable (session list failed)");
   expect(code).toBe(1);
 });
 

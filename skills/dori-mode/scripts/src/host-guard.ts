@@ -2,7 +2,8 @@ import { availableParallelism, homedir } from "node:os";
 
 import type { GuardThresholds } from "./config.ts";
 import { IS_WINDOWS } from "./paths.ts";
-import type { Runner } from "./run.ts";
+import { type ChosenRuntimes, type Runner, runtimesFor } from "./run.ts";
+import { listSessions } from "./sessions.ts";
 
 export type HostSample = {
   readonly load1: number;
@@ -72,12 +73,14 @@ export const parseWindowsSample = (json: string, cpus: number): Omit<HostSample,
   };
 };
 
-const herdrPanes = async (run: Runner): Promise<number> => {
-  const pl = await run(["herdr", "pane", "list"]);
-  return pl.code === 0 ? (JSON.parse(pl.out) as { result: { panes: unknown[] } }).result.panes.length : -1;
-};
+// A failed session list (no runtime, a refused call) is -1, never 0: an unknown count must not pass the guard.
+const sessionCount = (rts: ChosenRuntimes): Promise<number> =>
+  listSessions(rts).then(
+    (sessions) => sessions.length,
+    () => -1,
+  );
 
-const sampleWindows = async (run: Runner, dataPath: string, env: HostEnv): Promise<HostSample> => {
+const sampleWindows = async (run: Runner, dataPath: string, env: HostEnv, rts: ChosenRuntimes): Promise<HostSample> => {
   const r = await run([
     "powershell.exe",
     "-NoProfile",
@@ -91,11 +94,16 @@ const sampleWindows = async (run: Runner, dataPath: string, env: HostEnv): Promi
     diskFreeGb: 0,
     swapFreeGb: 0,
   };
-  return { ...s, panes: await herdrPanes(run) };
+  return { ...s, panes: await sessionCount(rts) };
 };
 
-export const sampleHost = async (run: Runner, dataPath = "/", env: HostEnv = realEnv()): Promise<HostSample> => {
-  if (env.windows) return sampleWindows(run, dataPath, env);
+export const sampleHost = async (
+  run: Runner,
+  dataPath = "/",
+  rts: ChosenRuntimes = runtimesFor({}, process.env, run),
+  env: HostEnv = realEnv(),
+): Promise<HostSample> => {
+  if (env.windows) return sampleWindows(run, dataPath, env, rts);
   const load = await run(["sysctl", "-n", "vm.loadavg"]);
   const loadLinux = load.code === 0 ? null : await run(["cat", "/proc/loadavg"]);
   const load1 = num(
@@ -120,7 +128,11 @@ export const sampleHost = async (run: Runner, dataPath = "/", env: HostEnv = rea
   const diskFreeGb = num(df.out.split("\n").at(-1)?.trim().split(/\s+/)[3], 0) / 1_048_576;
   const swap = await run(["sysctl", "-n", "vm.swapusage"]);
   const swapFreeGb = num(/free = ([\d.]+)M/.exec(swap.out)?.[1], 0) / 1024;
-  const panes = await herdrPanes(run);
+  // A failed session list (no runtime, a refused call) is -1, never 0: an unknown count must not pass the guard.
+  const panes = await listSessions(rts).then(
+    (sessions) => sessions.length,
+    () => -1,
+  );
   return { load1, memFreePct, diskFreeGb, swapFreeGb, panes };
 };
 

@@ -1,7 +1,6 @@
 import { expect, test } from "bun:test";
 
 import { lastLines, paneCommand, quoteForPane, resolvePaneShell, shellFromProcess } from "../src/launch.ts";
-import type { Runner } from "../src/run.ts";
 
 const tricky = ["bun", "-e", "x", "--", 'it\'s "quoted"; & | % ^ $x', "C:\\Program Files\\a b", "\u00fc \ud55c\uae00"];
 
@@ -44,24 +43,22 @@ test("shell names map from process names with or without .exe and path", () => {
   expect(shellFromProcess("bun.exe")).toBeUndefined();
 });
 
-const infoRunner =
-  (procs: unknown[] | "bad"): Runner =>
-  async () => ({
-    code: 0,
-    out: procs === "bad" ? "nope" : JSON.stringify({ result: { process_info: { foreground_processes: procs } } }),
-    err: "",
-  });
+// The new session's foreground as the runtime's probe reports it; "bad" is a probe that fails.
+const infoRunner = (procs: { name?: string; argv0?: string }[] | "bad") => async () => {
+  if (procs === "bad") throw new Error("probe failed");
+  return procs;
+};
 
 test("auto detects the pane shell on Windows, falls back to pwsh, and is posix elsewhere", async () => {
-  expect(await resolvePaneShell("auto", infoRunner([{ name: "cmd.exe" }]), "p1", true)).toBe("cmd");
-  expect(
-    await resolvePaneShell(undefined, infoRunner([{ name: "x", argv0: "C:\\w\\powershell.exe" }]), "p1", true),
-  ).toBe("powershell");
-  expect(await resolvePaneShell("auto", infoRunner([{ name: "bash" }]), "p1", true)).toBe("posix");
-  expect(await resolvePaneShell("auto", infoRunner([{ name: "bun.exe" }]), "p1", true)).toBe("pwsh");
-  expect(await resolvePaneShell("auto", infoRunner("bad"), "p1", true)).toBe("pwsh");
-  expect(await resolvePaneShell("auto", infoRunner([{ name: "cmd.exe" }]), "p1", false)).toBe("posix");
-  expect(await resolvePaneShell("cmd", infoRunner([]), "p1", false)).toBe("cmd");
+  expect(await resolvePaneShell("auto", infoRunner([{ name: "cmd.exe" }]), true)).toBe("cmd");
+  expect(await resolvePaneShell(undefined, infoRunner([{ name: "x", argv0: "C:\\w\\powershell.exe" }]), true)).toBe(
+    "powershell",
+  );
+  expect(await resolvePaneShell("auto", infoRunner([{ name: "bash" }]), true)).toBe("posix");
+  expect(await resolvePaneShell("auto", infoRunner([{ name: "bun.exe" }]), true)).toBe("pwsh");
+  expect(await resolvePaneShell("auto", infoRunner("bad"), true)).toBe("pwsh");
+  expect(await resolvePaneShell("auto", infoRunner([{ name: "cmd.exe" }]), false)).toBe("posix");
+  expect(await resolvePaneShell("cmd", infoRunner([]), false)).toBe("cmd");
 });
 
 test("lastLines scrubs POSIX and Windows local paths and the home directory but not URLs", () => {

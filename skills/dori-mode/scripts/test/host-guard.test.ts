@@ -1,13 +1,20 @@
+import { runtimesFor } from "../src/run.ts";
 import { describe, expect, test } from "bun:test";
 
 import { type HostEnv, parseWindowsSample, sampleHost, windowsDrive } from "../src/host-guard.ts";
 import type { Ran, Runner } from "../src/run.ts";
 
+// sampleHost on the herdr runtime over the same fake runner (the session count is herdr's pane list).
+const hostOf = (run: Runner, path: string, env: Parameters<typeof sampleHost>[3]) =>
+  sampleHost(run, path, runtimesFor({ runtime: "herdr" }, {}, run), env);
+
 const ok = (out: string): Ran => ({ code: 0, out, err: "" });
 const fail: Ran = { code: 127, out: "", err: "not found" };
 const win: HostEnv = { windows: true, home: "C:\\Users\\me", cpus: 8 };
 const mac: HostEnv = { windows: false, home: "/Users/me", cpus: 8 };
-const panesJson = JSON.stringify({ result: { panes: [{}, {}, {}] } });
+const panesJson = JSON.stringify({
+  result: { panes: [{ pane_id: "w:p1" }, { pane_id: "w:p2" }, { pane_id: "w:p3" }] },
+});
 
 const sampleJson = (patch: Record<string, unknown> = {}): string =>
   JSON.stringify({
@@ -62,7 +69,7 @@ describe("windowsDrive", () => {
 describe("sampleHost on windows", () => {
   test("one powershell call plus herdr", async () => {
     const calls: string[][] = [];
-    const s = await sampleHost(winRunner(ok(sampleJson()), calls), "/", win);
+    const s = await hostOf(winRunner(ok(sampleJson()), calls), "/", win);
     expect(s).toEqual({ load1: 4, memFreePct: 25, diskFreeGb: 100, swapFreeGb: 2.5, panes: 3 });
     const ps = calls.filter((c) => c[0] === "powershell.exe");
     expect(ps).toHaveLength(1);
@@ -72,12 +79,12 @@ describe("sampleHost on windows", () => {
   });
   test("explicit data path picks its drive", async () => {
     const calls: string[][] = [];
-    await sampleHost(winRunner(ok(sampleJson()), calls), "D:\\x", win);
+    await hostOf(winRunner(ok(sampleJson()), calls), "D:\\x", win);
     expect(calls[0]?.[4]).toContain("DeviceID='D:'");
   });
   test("failed or garbage powershell keeps the unknown values and holds disk", async () => {
     for (const ps of [fail, ok("garbage"), { code: 1, out: sampleJson(), err: "x" }]) {
-      expect(await sampleHost(winRunner(ps), "/", win)).toEqual({
+      expect(await hostOf(winRunner(ps), "/", win)).toEqual({
         load1: 0,
         memFreePct: 100,
         diskFreeGb: 0,
@@ -110,7 +117,7 @@ describe("sampleHost on macOS (unchanged)", () => {
           return fail;
       }
     };
-    expect(await sampleHost(run, "/", mac)).toEqual({
+    expect(await hostOf(run, "/", mac)).toEqual({
       load1: 3.5,
       memFreePct: 42,
       diskFreeGb: 2,
@@ -122,7 +129,7 @@ describe("sampleHost on macOS (unchanged)", () => {
   test("linux load fallback and failure defaults", async () => {
     const run: Runner = async (argv) =>
       argv[0] === "cat" ? ok("1.25 1 1 1/1 1") : argv[0] === "herdr" ? { code: 1, out: "", err: "" } : fail;
-    expect(await sampleHost(run, "/", mac)).toEqual({
+    expect(await hostOf(run, "/", mac)).toEqual({
       load1: 1.25,
       memFreePct: 100,
       diskFreeGb: 0,
