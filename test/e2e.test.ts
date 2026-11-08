@@ -199,6 +199,8 @@ describe.skipIf(!herdrBin || !IS_WINDOWS).each(windowsShells.filter(([, exe]) =>
     ...base,
     DORI_HOME: own,
     DORI_HERDR_SESSION: name,
+    // Pinned like the env above: with herdr and hc both on PATH, dori refuses to guess the runtime.
+    DORI_RUNTIME: "herdr",
     DORI_TELEMETRY: "0",
     HERDR_CONFIG_PATH: config,
   };
