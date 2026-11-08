@@ -40,6 +40,7 @@ Needs: bun 1.3+, herdr, git, and the GitHub CLI (`gh`) for `merged`/`closed` sig
 | `hooks.transcribe` | none | `transcribe` (argv with `{file}`, prints the text) |
 | `hooks.autostart` | none | `setup` (argv run once the env file is complete, e.g. to register a logon task; `{src}` is the dori checkout, `{home}` the home folder) |
 | `supervision` | no ceilings by default (set wallMinutes, tokens or costUsd to enable); hung after 20 min | `freshness`, `launch`, `close` (see Supervision below) |
+| `workingAgent` (alias `workingHerdr`), `workingTitle`, `workingScreen` | off, `^OmO - Running `, `^─+ • Working \(.*esc to interrupt\)` | the Windows profile's Slack listener: keep the working status (plus an hourglass reaction) only while the lead's agent works, as `herdr pane get` / `hc get` report it, with the title and screen regexes as fallbacks (`""` turns one off). Env: `DORI_WORKING_UNKNOWN_LIMIT_MS` (10 min while the state is unknown), `DORI_WORKING_GRACE_MS` (15 s), `DORI_HERDR_TIMEOUT_MS` (5 s per runtime call) |
 | `repoIdentities` | none | `verify-pr`, `launch` footer: expected Git name and email per `owner/repo` (keys match without case) |
 
 Hooks are argv templates for your messenger CLI. `{thread}`, `{text}` and `{key}` are filled into each argument separately, so the text stays one argument whatever it contains.
