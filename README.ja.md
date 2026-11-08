@@ -6,7 +6,9 @@
 
 # win-dori
 
-Dori モードは、コーディングエージェントのセッションひとつを常駐型のメッセンジャーエージェントに変えます。あなたが話す相手は Telegram か Discord のボットひとつだけ。Dori は仕事ごとに herdr のタブでエージェントセッションを立ち上げて任せ、自分が立ち上げたセッションをすべて覚えておき、仕事が本当に終わったときだけ閉じます。PR がマージされ、issue が閉じ、バージョンが公開されたあとです。
+> **win-dori は [sisyphuslabs/dori-superagent](https://github.com/sisyphuslabs/dori-superagent) の Windows 移植版です。** 上流のコミット [181df3e](https://github.com/sisyphuslabs/dori-superagent/commit/181df3e) をもとにしており、挙動と既定値は上流のままです。ここで加えたのは Windows に必要な部分です。PowerShell でのインストール、pane のシェル判定、自動起動と Slack リスナーを含む Windows プロファイルです。Dori モードとハーネスの功績は上流の作者にあり、Windows 部分のバグは私たちの責任です。ライセンスには元の著作権表示をそのまま残しています。
+
+Dori モードは、コーディングエージェントのセッションひとつを常駐型のメッセンジャーエージェントに変えます。あなたが話す相手は Slack、Telegram、Discord のどれかのボットひとつだけ。Dori は仕事ごとに herdr のタブでエージェントセッションを立ち上げて任せ、自分が立ち上げたセッションをすべて覚えておき、仕事が本当に終わったときだけ閉じます。PR がマージされ、issue が閉じ、バージョンが公開されたあとです。
 
 中身はスキル(`skills/dori-mode/SKILL.md` と references)と、bun + TypeScript の小さな CLI `dori` です。実験段階なので、粗いところがあります。
 
@@ -34,7 +36,7 @@ curl -fsSL https://raw.githubusercontent.com/useonmn/win-dori/main/install.sh | 
 
 ## スーパーエージェント・ハーネス
 
-このリポジトリのルートには、[sisyphuslabs/dori-superagent](https://github.com/sisyphuslabs/dori-superagent) のハーネスを移植したものも入っています。Dori モードとは別の、より小さな仕組みで、挙動と既定値は上流のままです。
+このリポジトリのルートには、[sisyphuslabs/dori-superagent](https://github.com/sisyphuslabs/dori-superagent) のハーネスを移植したものも入っています。Dori モードとは別の、より小さな仕組みで、挙動と既定値は上流のままです。この節の文章は上流の README から移したものなので、「私たち」は上流のチームを指します。
 
 人と会話するのは lead セッション一つだけです。タスクは一つずつ lane として走ります。lane は専用の herdr タブに立てた omo セッションで、文書化された brief（指示書）から始まり、エビデンス付きの READY で終わります。duty ループは黙り込んだ lane を催促し、lead にエスカレーションし、忙しいペイン宛てのメッセージは読める状態になるまで預かります。マージはゲートを通ります。ゲートが要求するのは、現在の head SHA に対する CLEAR のレビュー記録（receipt）と、グリーンのチェックです。
 
@@ -363,7 +365,7 @@ Windows プロファイルの Slack リスナーは、受け取ったメッセ�
 
 ## テスト
 
-CI はありません。テストはローカルで回します。
+main への push と PR のたびに GitHub Actions の CI(Windows、Ubuntu)がガード、型チェック、テストを回します。ローカルでは次のように回します。
 
 ```sh
 cd skills/dori-mode/scripts

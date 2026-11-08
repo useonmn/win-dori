@@ -6,7 +6,9 @@
 
 # win-dori
 
-Dori mode turns one coding-agent session into an always-on messenger agent. You talk to a single bot on Telegram or Discord. The Dori hands each job to its own agent session in a herdr tab, keeps track of every session it started, and only closes one after the work is actually done: the PR merged, the issue closed, the version published.
+> **win-dori is a Windows port of [sisyphuslabs/dori-superagent](https://github.com/sisyphuslabs/dori-superagent).** It is based on upstream commit [181df3e](https://github.com/sisyphuslabs/dori-superagent/commit/181df3e) and keeps upstream's behaviour and defaults. What it adds is what Windows needs: the PowerShell install, shell-aware panes, and a Windows profile with autostart and a Slack listener. Credit for Dori mode and the harness goes to the upstream authors; bugs in the Windows parts are ours. The license keeps the original copyright notice.
+
+Dori mode turns one coding-agent session into an always-on messenger agent. You talk to a single bot on Slack, Telegram or Discord. The Dori hands each job to its own agent session in a herdr tab, keeps track of every session it started, and only closes one after the work is actually done: the PR merged, the issue closed, the version published.
 
 It ships as a skill (`skills/dori-mode/SKILL.md` plus references) and a small bun + TypeScript CLI called `dori`. Experimental: expect rough edges.
 
@@ -63,7 +65,7 @@ Then open your agent inside herdr and say "Dori mode".
 
 ## The superagent harness
 
-The repo also carries the harness from [sisyphuslabs/dori-superagent](https://github.com/sisyphuslabs/dori-superagent), ported to run on Windows, macOS and Linux with upstream's behaviour and defaults. Its command is `dori-harness`.
+The repo also carries the harness from [sisyphuslabs/dori-superagent](https://github.com/sisyphuslabs/dori-superagent), ported to run on Windows, macOS and Linux with upstream's behaviour and defaults. Its command is `dori-harness`. The text in this section comes from upstream's README, so "we" and "our" mean the upstream team.
 
 One lead session talks to you. Each task runs as a lane: its own omo session in its own herdr tab, started from a written brief and finished with a READY that must carry evidence. A duty loop nudges lanes that go quiet, escalates to the lead, and holds messages for busy panes until they can read them. Merges pass through a gate that requires a CLEAR review receipt at the exact head plus green checks.
 
@@ -390,7 +392,7 @@ Tokens come from `DORI_SLACK_TOKEN` (with `DORI_SLACK_COOKIE` for a user token),
 
 ## Tests
 
-There's no CI. Run the tests locally:
+CI runs on every push to main and every pull request (see the end of this section). To run the tests locally:
 
 ```sh
 cd skills/dori-mode/scripts
