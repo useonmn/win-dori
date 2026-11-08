@@ -1,0 +1,15 @@
+{
+  "name": "windori-harness",
+  "version": "0.1.0",
+  "private": true,
+  "description": "dori superagent harness (ports to windori on Windows, macOS and Linux)",
+  "type": "module",
+  "license": "MIT",
+  "bin": { "dori-harness": "src/cli.ts" },
+  "scripts": {
+    "test": "bun test ./test/",
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": { "@types/bun": "^1.3.0", "typescript": "^5.9.0" },
+  "engines": { "bun": ">=1.3" }
+}

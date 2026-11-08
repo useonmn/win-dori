@@ -1,0 +1,7 @@
+# Shell scripts must stay LF (bash rejects CR); cmd scripts must stay CRLF (cmd.exe label/line parsing). Other files are left alone.
+*.sh text eol=lf
+*.cmd text eol=crlf
+# Screen fixtures are compared line by line, and the container files run inside Linux: keep them LF on Windows checkouts.
+test/fixtures/screens/*.txt text eol=lf
+examples/container/Dockerfile text eol=lf
+examples/container/*.yaml text eol=lf

@@ -1,0 +1,78 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, ubuntu-latest]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v4
+        timeout-minutes: 5
+
+      - uses: oven-sh/setup-bun@v2
+        timeout-minutes: 5
+        with:
+          bun-version: 1.4.4
+
+      - name: Git identity for tests that commit
+        timeout-minutes: 1
+        run: |
+          git config --global user.name "dori-ci"
+          git config --global user.email "dori-ci@example.com"
+          git config --global init.defaultBranch main
+
+      - name: Path / personal value guard
+        timeout-minutes: 2
+        run: bun scripts/check-paths.ts
+
+      - name: Install (root)
+        timeout-minutes: 5
+        run: bun install --frozen-lockfile
+
+      - name: Install (dori-mode skill)
+        timeout-minutes: 5
+        working-directory: skills/dori-mode/scripts
+        run: bun install --frozen-lockfile
+
+      - name: Typecheck (root)
+        timeout-minutes: 5
+        run: bun x tsc --noEmit
+
+      - name: Typecheck (dori-mode skill)
+        timeout-minutes: 5
+        working-directory: skills/dori-mode/scripts
+        run: bun x tsc --noEmit
+
+      - name: Root tests
+        timeout-minutes: 15
+        run: bun test ./test/
+
+      - name: Skill tests
+        timeout-minutes: 15
+        working-directory: skills/dori-mode/scripts
+        run: bun test
+
+      - name: Windows profile tests
+        if: runner.os == 'Windows'
+        timeout-minutes: 10
+        working-directory: profile
+        run: bun test
