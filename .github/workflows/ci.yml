@@ -96,3 +96,23 @@ jobs:
           else
             echo 'SKIP e2e-hc until the test lands'
           fi
+
+  # win-dori: the same hc e2e on Windows, hc installed the official way (herdr-core's install.ps1).
+  e2e-hc-windows:
+    runs-on: windows-latest
+    timeout-minutes: 20
+    env:
+      HC_SESSION: dori-ci-${{ github.run_id }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
+        with:
+          bun-version: 1.4.4
+      - run: bun install --frozen-lockfile
+      - name: Install hc (herdr-core install.ps1)
+        shell: pwsh
+        run: |
+          powershell -c "irm https://releases.herdr.dev/core/install.ps1 | iex"
+          "$env:LOCALAPPDATA\Programs\herdr-core" | Out-File -FilePath $env:GITHUB_PATH -Append -Encoding utf8
+      - run: hc --version
+      - run: bun test test/e2e-hc.test.ts
