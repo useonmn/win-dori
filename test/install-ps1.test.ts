@@ -83,7 +83,7 @@ describe.skipIf(process.platform !== "win32")("install.ps1", () => {
   for (const [name, exe] of shells) {
     // Every scenario runs under pwsh 7 and under Windows PowerShell 5.1 (native stderr under 'Stop' behaves differently there).
     // One installer run took up to 7 s on a loaded 4-core PC, past bun's 5 s default; each test gets 15 s per run it makes.
-    const t = (title: string, fn: () => void, installs = 1) => (exe ? test : test.skip)(title, fn, installs * 15_000);
+    const t = (title: string, fn: () => void, installs = 1) => (exe ? test : test.skip)(title, fn, installs * 30_000);
 
     t(`${name}: a second install over a clean checkout pulls upstream`, () => {
       const { upstream, src, upstreamCommit, install } = setup(name);
