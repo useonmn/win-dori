@@ -23,7 +23,11 @@ export type TelemetryEvent =
   | { name: "dori.review_completed"; verdict: "CLEAR" | "BLOCK" }
   | ({ name: "dori.duty_summary" } & DutyCounts);
 
-export type Sender = (url: string, body: string, headers: Record<string, string>) => Promise<{ status: number; text: string }>;
+export type Sender = (
+  url: string,
+  body: string,
+  headers: Record<string, string>,
+) => Promise<{ status: number; text: string }>;
 
 export interface Usage {
   touch(): void;
@@ -34,10 +38,12 @@ export interface Usage {
 
 export const NOTICE = "dori sends anonymous usage counts (no paths, names or text). Turn it off with DORI_TELEMETRY=0.";
 
-const isOff = (v: string | undefined) => v !== undefined && ["0", "false", "no", "off"].includes(v.trim().toLowerCase());
+const isOff = (v: string | undefined) =>
+  v !== undefined && ["0", "false", "no", "off"].includes(v.trim().toLowerCase());
 const isOn = (v: string | undefined) => v !== undefined && ["1", "true", "yes"].includes(v.trim().toLowerCase());
 
-export const telemetryEnabled = (env: NodeJS.ProcessEnv): boolean => !isOff(env["DORI_TELEMETRY"]) && !isOn(env["DO_NOT_TRACK"]);
+export const telemetryEnabled = (env: NodeJS.ProcessEnv): boolean =>
+  !isOff(env["DORI_TELEMETRY"]) && !isOn(env["DO_NOT_TRACK"]);
 
 type State = {
   installId: string;
@@ -67,7 +73,7 @@ export class Telemetry implements Usage {
     private readonly env: NodeJS.ProcessEnv = process.env,
     private readonly send: Sender = fetchSender,
     private readonly now: () => number = Date.now,
-    private readonly notice: (s: string) => void = (s) => process.stderr.write(s + "\n"),
+    private readonly notice: (s: string) => void = (s) => process.stderr.write(`${s}\n`),
     private readonly fsOps: FsOps = realFsOps,
   ) {}
 
@@ -82,7 +88,12 @@ export class Telemetry implements Usage {
 
   async flush(maxMs: number): Promise<void> {
     let timer: ReturnType<typeof setTimeout> | undefined;
-    await Promise.race([this.queue, new Promise<void>((r) => { timer = setTimeout(r, maxMs); })]);
+    await Promise.race([
+      this.queue,
+      new Promise<void>((r) => {
+        timer = setTimeout(r, maxMs);
+      }),
+    ]);
     clearTimeout(timer);
   }
 
@@ -91,27 +102,29 @@ export class Telemetry implements Usage {
   private load(): State {
     if (!existsSync(this.path)) {
       const tmp = `${this.path}.${process.pid}.${randomBytes(4).toString("hex")}.new`;
-      writeFileSync(tmp, JSON.stringify({ installId: randomBytes(16).toString("hex") }) + "\n", { mode: 0o600 });
+      writeFileSync(tmp, `${JSON.stringify({ installId: randomBytes(16).toString("hex") })}\n`, { mode: 0o600 });
+      let linkError: unknown;
       try {
         retrying(() => linkSync(tmp, this.path), this.fsOps);
       } catch (e) {
-        if ((e as NodeJS.ErrnoException).code !== "EEXIST") throw e;
-      } finally {
-        // unlink, not rm: on Windows, Bun's rmSync of this second name now and then left the claimed telemetry.json
-        // refusing every later rename onto it with EPERM (9 of 4000 first runs; unlinkSync 0 of 4000), so no state was saved.
-        try {
-          retrying(() => unlinkSync(tmp), this.fsOps);
-        } catch (e) {
-          if (!isTransient(e, this.fsOps)) throw e;
-        }
+        if ((e as NodeJS.ErrnoException).code !== "EEXIST") linkError = e;
       }
+      // unlink, not rm: on Windows, Bun's rmSync of this second name now and then left the claimed telemetry.json
+      // refusing every later rename onto it with EPERM (9 of 4000 first runs; unlinkSync 0 of 4000), so no state was saved.
+      // A failed unlink is thrown before a failed link, as the old finally block did.
+      try {
+        retrying(() => unlinkSync(tmp), this.fsOps);
+      } catch (e) {
+        if (!isTransient(e, this.fsOps)) throw e;
+      }
+      if (linkError !== undefined) throw linkError;
     }
     return JSON.parse(retrying(() => readFileSync(this.path, "utf8"), this.fsOps)) as State;
   }
 
   private save(state: State): void {
     const tmp = `${this.path}.${process.pid}.tmp`;
-    replaceFile(tmp, this.path, JSON.stringify(state) + "\n", this.fsOps, 0o600);
+    replaceFile(tmp, this.path, `${JSON.stringify(state)}\n`, this.fsOps, 0o600);
   }
 
   touch(): void {
@@ -152,7 +165,7 @@ export class Telemetry implements Usage {
         return;
       }
       const { since: _since, ...totals } = acc;
-      state.duty = undefined;
+      delete state.duty;
       this.save(state);
       await this.emit(state, [{ name: "dori.duty_summary", ...totals }]);
     });
@@ -166,9 +179,12 @@ export class Telemetry implements Usage {
     const key = this.env["DORI_TELEMETRY_KEY"] ?? state.key ?? (await this.register(endpoint, installHash, state));
     if (key === undefined) return false;
     const body = JSON.stringify(otlpLogs(installHash, events, this.now(), this.env));
-    const res = await this.send(`${endpoint}/v1/logs`, body, { "content-type": "application/json", "x-omo-ingest-key": key });
+    const res = await this.send(`${endpoint}/v1/logs`, body, {
+      "content-type": "application/json",
+      "x-omo-ingest-key": key,
+    });
     if (res.status === 401 && state.key !== undefined) {
-      state.key = undefined;
+      delete state.key;
       this.save(state);
       return false;
     }
@@ -183,9 +199,13 @@ export class Telemetry implements Usage {
 
   // The collector mints a key bound to this install hash; it is cached locally and never shared between installs.
   private async register(endpoint: string, installHash: string, state: State): Promise<string | undefined> {
-    const res = await this.send(`${endpoint}/v1/register`, JSON.stringify({ product: "dori-superagent", install_hash: installHash }), {
-      "content-type": "application/json",
-    });
+    const res = await this.send(
+      `${endpoint}/v1/register`,
+      JSON.stringify({ product: "dori-superagent", install_hash: installHash }),
+      {
+        "content-type": "application/json",
+      },
+    );
     if (res.status !== 200) return undefined;
     const key = (JSON.parse(res.text) as { key?: unknown }).key;
     if (typeof key !== "string" || key === "") return undefined;
@@ -198,14 +218,15 @@ export class Telemetry implements Usage {
 // The collector answers 200 even when it refuses records; the refusal count is in partialSuccess.
 export function rejectedRecords(text: string): number {
   try {
-    const n = Number((JSON.parse(text) as { partialSuccess?: { rejectedLogRecords?: unknown } }).partialSuccess?.rejectedLogRecords ?? 0);
+    const n = Number(
+      (JSON.parse(text) as { partialSuccess?: { rejectedLogRecords?: unknown } }).partialSuccess?.rejectedLogRecords ??
+        0,
+    );
     return Number.isFinite(n) && n > 0 ? n : 0;
   } catch {
     return 0;
   }
 }
-
-export const noUsage: Usage = { touch: () => {}, record: () => {}, duty: () => {}, flush: async () => {} };
 
 const osVersion = () => {
   const v = release().match(/^\d{1,6}(?:\.\d{1,6}){1,3}/)?.[0];
@@ -214,10 +235,19 @@ const osVersion = () => {
 
 type AnyValue = { stringValue: string } | { intValue: string } | { boolValue: boolean };
 const value = (v: string | number | boolean): AnyValue =>
-  typeof v === "string" ? { stringValue: v } : typeof v === "boolean" ? { boolValue: v } : { intValue: String(Math.trunc(v)) };
+  typeof v === "string"
+    ? { stringValue: v }
+    : typeof v === "boolean"
+      ? { boolValue: v }
+      : { intValue: String(Math.trunc(v)) };
 const attr = (key: string, v: string | number | boolean) => ({ key, value: value(v) });
 
-export function otlpLogs(installHash: string, events: readonly TelemetryEvent[], nowMs: number, env: NodeJS.ProcessEnv) {
+export function otlpLogs(
+  installHash: string,
+  events: readonly TelemetryEvent[],
+  nowMs: number,
+  env: NodeJS.ProcessEnv,
+) {
   const timeUnixNano = (BigInt(nowMs) * 1_000_000n).toString();
   return {
     resourceLogs: [

@@ -8,7 +8,9 @@ test("a real user home or a fixed dev root fails; placeholders and neutral roots
   expect(rules("cd /home/jdoe/src")).toEqual(["user-home-path"]);
   expect(rules("git clone x C:\\dev\\thing")).toEqual(["fixed-install-root"]);
   expect(rules("cd /c/dev/thing")).toEqual(["fixed-install-root"]);
-  expect(rules("C:\\Users\\<you>\\.dori, %USERPROFILE%, /home/runner/work, D:\\code\\dori, /home/dori/.omo")).toEqual([]);
+  expect(rules("C:\\Users\\<you>\\.dori, %USERPROFILE%, /home/runner/work, D:\\code\\dori, /home/dori/.omo")).toEqual(
+    [],
+  );
 });
 
 test("a personal mailbox fails and is masked; example and noreply addresses pass", () => {

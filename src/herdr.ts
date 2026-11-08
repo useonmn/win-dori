@@ -5,14 +5,21 @@ import { resolveCommand } from "./run.ts";
 import { IS_WINDOWS } from "./shell.ts";
 
 /** `refused`: spawnExec would not run the argv (resolveCommand refused it for a .cmd shim): nothing was sent. */
-export type ExecResult = { readonly code: number; readonly stdout: string; readonly stderr: string; readonly refused?: true };
+export type ExecResult = {
+  readonly code: number;
+  readonly stdout: string;
+  readonly stderr: string;
+  readonly refused?: true;
+};
 export type Exec = (cmd: string, argv: readonly string[]) => Promise<ExecResult>;
 
 export const spawnExec: Exec = async (cmd, argv) => {
   const resolved = resolveCommand([cmd, ...argv]);
   if ("refused" in resolved) return { code: 126, stdout: "", stderr: resolved.refused, refused: true };
   const proc = Bun.spawn([...resolved.argv], {
-    stdout: "pipe", stderr: "pipe", stdin: "ignore",
+    stdout: "pipe",
+    stderr: "pipe",
+    stdin: "ignore",
     ...(resolved.verbatim ? { windowsVerbatimArguments: true } : {}),
   });
   const [stdout, stderr, code] = await Promise.all([
@@ -24,7 +31,10 @@ export const spawnExec: Exec = async (cmd, argv) => {
 };
 
 export class HerdrError extends Error {
-  constructor(readonly argv: readonly string[], readonly result: ExecResult) {
+  constructor(
+    readonly argv: readonly string[],
+    readonly result: ExecResult,
+  ) {
     super(`herdr ${argv.join(" ")} failed (${result.code}): ${(result.stderr || result.stdout).trim()}`);
   }
 }
@@ -34,13 +44,18 @@ export class HerdrError extends Error {
  * it twice. `typed`: the text is in the pane's input and only the Enter that submits it is missing.
  */
 export class DeliveryUncertain extends Error {
-  constructor(readonly failure: unknown, readonly typed: boolean, readonly agent?: AgentIdentity) {
+  constructor(
+    readonly failure: unknown,
+    readonly typed: boolean,
+    readonly agent?: AgentIdentity,
+  ) {
     super(failure instanceof Error ? failure.message : String(failure));
   }
 }
 
 /** A herdr call spawnExec refused to run never reached herdr: a plain failure, never an uncertain delivery. */
-const untypedFailure = (e: unknown): Error => (e instanceof HerdrError && e.result.refused ? e : new DeliveryUncertain(e, false));
+const untypedFailure = (e: unknown): Error =>
+  e instanceof HerdrError && e.result.refused ? e : new DeliveryUncertain(e, false);
 
 /**
  * Which agent typed text went into (#108), as herdr reports it: `agent` is the agent name from `pane get`, `pgid` the
@@ -48,6 +63,11 @@ const untypedFailure = (e: unknown): Error => (e instanceof HerdrError && e.resu
  * the same across an omo exit and restart in the same pane, so it cannot tell two agents apart.
  */
 export type AgentIdentity = { readonly agent?: string; readonly pgid?: number };
+
+const identity = (agent: string | undefined, pgid: number | undefined): AgentIdentity => ({
+  ...(agent !== undefined ? { agent } : {}),
+  ...(pgid !== undefined ? { pgid } : {}),
+});
 
 /** What submitTyped did: pressed Enter, found the agent away for now (suspended), or found a different or no agent. */
 export type SubmitResult = "submitted" | "wait" | "changed";
@@ -82,11 +102,32 @@ export function omoScreenIdle(screen: string): boolean {
 }
 
 const SHELLS: ReadonlySet<string> = new Set([
-  "sh", "ash", "bash", "zsh", "fish", "dash", "ksh", "mksh", "tcsh", "csh", "nu", "elvish", "xonsh", "pwsh", "powershell", "cmd", "busybox",
+  "sh",
+  "ash",
+  "bash",
+  "zsh",
+  "fish",
+  "dash",
+  "ksh",
+  "mksh",
+  "tcsh",
+  "csh",
+  "nu",
+  "elvish",
+  "xonsh",
+  "pwsh",
+  "powershell",
+  "cmd",
+  "busybox",
 ]);
 // Windows names come as C:\...\pwsh.exe: split on either separator and drop .exe.
 const baseName = (value: unknown): string =>
-  String(value ?? "").replace(/^-/, "").split(/[\\/]/).pop()!.toLowerCase().replace(/\.exe$/, "");
+  String(value ?? "")
+    .replace(/^-/, "")
+    .split(/[\\/]/)
+    .pop()!
+    .toLowerCase()
+    .replace(/\.exe$/, "");
 const isPowerShell = (shell: string): boolean => shell === "pwsh" || shell === "powershell";
 // A shell runs a command (not a prompt) only with an explicit command flag: -c, also inside combined short flags such
 // as -lc, or PowerShell's -Command/-File/-EncodedCommand (whole words only: its other long flags contain a 'c';
@@ -109,8 +150,12 @@ const keepsPrompt = (shell: string, arg: string): boolean =>
 const onlyPaneShell = (processInfo: unknown): boolean => {
   const info = processInfo as { shell_pid?: unknown; foreground_processes?: unknown } | undefined;
   const procs = info?.foreground_processes;
-  return typeof info?.shell_pid === "number" && Array.isArray(procs) && procs.length > 0 &&
-    procs.every((p) => (p as { pid?: unknown } | undefined)?.pid === info.shell_pid);
+  return (
+    typeof info?.shell_pid === "number" &&
+    Array.isArray(procs) &&
+    procs.length > 0 &&
+    procs.every((p) => (p as { pid?: unknown } | undefined)?.pid === info.shell_pid)
+  );
 };
 
 /**
@@ -122,7 +167,8 @@ const onlyPaneShell = (processInfo: unknown): boolean => {
  * pane's own shell (see onlyPaneShell) it decides instead: no agent (`shell`, `gone`) holds, any agent delivers.
  */
 export function interactiveShellInFront(processInfo: unknown, windowsAgent?: AgentStatus): boolean {
-  if (windowsAgent !== undefined && onlyPaneShell(processInfo)) return windowsAgent === "shell" || windowsAgent === "gone";
+  if (windowsAgent !== undefined && onlyPaneShell(processInfo))
+    return windowsAgent === "shell" || windowsAgent === "gone";
   const procs = (processInfo as { foreground_processes?: unknown } | undefined)?.foreground_processes;
   if (!Array.isArray(procs) || procs.length === 0) return true;
   for (const proc of procs as { name?: unknown; argv?: unknown }[]) {
@@ -164,7 +210,12 @@ export class Herdr {
     return toPaneRef(r["root_pane"]);
   }
 
-  async createTab(label: string, cwd: string, workspaceId?: string, env: Record<string, string> = {}): Promise<PaneRef> {
+  async createTab(
+    label: string,
+    cwd: string,
+    workspaceId?: string,
+    env: Record<string, string> = {},
+  ): Promise<PaneRef> {
     const argv = ["tab", "create", "--label", label, "--cwd", cwd, "--no-focus"];
     if (workspaceId) argv.push("--workspace", workspaceId);
     for (const [k, v] of Object.entries(env)) argv.push("--env", `${k}=${v}`);
@@ -184,7 +235,15 @@ export class Herdr {
   async shellReady(paneId: string): Promise<void> {
     if (!this.windows) return;
     try {
-      await this.call(["pane", "wait-output", paneId, "--regex", String.raw`[>$#%\u{276F}]\s*\z`, "--timeout", String(PROMPT_WAIT_MS)]);
+      await this.call([
+        "pane",
+        "wait-output",
+        paneId,
+        "--regex",
+        String.raw`[>$#%\u{276F}]\s*\z`,
+        "--timeout",
+        String(PROMPT_WAIT_MS),
+      ]);
     } catch (e) {
       if (!(e instanceof HerdrError)) throw e;
     }
@@ -211,7 +270,10 @@ export class Herdr {
     if (!pane) return { status: "gone" };
     if (!pane["agent"]) return { status: "shell" };
     const s = String(pane["agent_status"] ?? "unknown");
-    return { status: (["idle", "working", "blocked", "done"].includes(s) ? s : "unknown") as AgentStatus, agent: String(pane["agent"]) };
+    return {
+      status: (["idle", "working", "blocked", "done"].includes(s) ? s : "unknown") as AgentStatus,
+      agent: String(pane["agent"]),
+    };
   }
 
   /**
@@ -230,7 +292,8 @@ export class Herdr {
       // with `pane run` is detected but refused. Fall back to typing the text and pressing Enter.
       // Match herdr's own output, never e.message: that carries argv, which includes the delivered text.
       // Any other failure (a timeout, say) may come after herdr handed the prompt over: it is ambiguous.
-      if (!(e instanceof HerdrError) || !/agent_not_ready/.test(e.result.stderr || e.result.stdout)) throw untypedFailure(e);
+      if (!(e instanceof HerdrError) || !/agent_not_ready/.test(e.result.stderr || e.result.stdout))
+        throw untypedFailure(e);
       // agent_not_ready also covers an agent that exited and left a shell in front: typing would run the text there.
       // Re-read right before typing (#66): only a pane that still has an agent gets keystrokes.
       const { status: st, agent } = await this.paneAgent(paneId);
@@ -245,7 +308,7 @@ export class Herdr {
         throw untypedFailure(err);
       }
       await Bun.sleep(PASTE_SETTLE_MS);
-      await this.pressEnter(paneId, { agent, pgid: front.pgid });
+      await this.pressEnter(paneId, identity(agent, front.pgid));
       return true;
     }
   }
@@ -268,7 +331,7 @@ export class Herdr {
     // recorded and the current pgid are the same shell pid.
     if (typedInto.agent !== undefined && agent !== typedInto.agent) return "changed";
     if (typedInto.pgid !== undefined && front.pgid !== typedInto.pgid) return "changed";
-    await this.pressEnter(paneId, { agent, pgid: front.pgid });
+    await this.pressEnter(paneId, identity(agent, front.pgid));
     return "submitted";
   }
 
@@ -298,7 +361,8 @@ export class Herdr {
     try {
       const info = (await this.call(["pane", "process-info", "--pane", paneId]))["process_info"];
       const pgid = (info as { foreground_process_group_id?: unknown } | undefined)?.foreground_process_group_id;
-      const windowsAgent = this.windows && onlyPaneShell(info) ? (status ?? (await this.paneAgent(paneId)).status) : undefined;
+      const windowsAgent =
+        this.windows && onlyPaneShell(info) ? (status ?? (await this.paneAgent(paneId)).status) : undefined;
       return { shell: interactiveShellInFront(info, windowsAgent), ...(typeof pgid === "number" ? { pgid } : {}) };
     } catch (e) {
       const reason = e instanceof HerdrError ? (e.result.stderr || e.result.stdout).trim() : String(e);
@@ -324,7 +388,16 @@ export class Herdr {
 
   async read(paneId: string, lines = 80): Promise<string> {
     const full = this.session ? ["--session", this.session] : [];
-    const res = await this.exec("herdr", [...full, "pane", "read", paneId, "--lines", String(lines), "--source", "recent"]);
+    const res = await this.exec("herdr", [
+      ...full,
+      "pane",
+      "read",
+      paneId,
+      "--lines",
+      String(lines),
+      "--source",
+      "recent",
+    ]);
     if (res.code !== 0) throw new HerdrError(["pane", "read", paneId], res);
     return res.stdout;
   }
@@ -340,4 +413,3 @@ function toPaneRef(v: unknown): PaneRef {
   if (!paneId) throw new Error("herdr did not return a pane id");
   return { paneId, tabId: String(o["tab_id"] ?? ""), workspaceId: String(o["workspace_id"] ?? "") };
 }
-

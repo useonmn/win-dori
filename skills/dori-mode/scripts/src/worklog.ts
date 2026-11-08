@@ -1,5 +1,18 @@
 import { randomBytes, randomUUID } from "node:crypto";
-import { closeSync, existsSync, fstatSync, mkdirSync, openSync, readFileSync, readSync, renameSync, rmSync, statSync, writeFileSync, writeSync } from "node:fs";
+import {
+  closeSync,
+  existsSync,
+  fstatSync,
+  mkdirSync,
+  openSync,
+  readFileSync,
+  readSync,
+  renameSync,
+  rmSync,
+  statSync,
+  writeFileSync,
+  writeSync,
+} from "node:fs";
 import { join } from "node:path";
 
 import { isTransientWindowsError, realSyncRetry, retryTransientSync, type SyncRetryOps } from "./fsx.ts";
@@ -31,22 +44,34 @@ export const WORKLOG_MARKER = "<!-- written by dori worklog from worklog.jsonl; 
 const ID = /^[0-9a-f]{8}$/;
 // C0 and C1 controls (C1 holds U+0085 NEL and the CSI \x9b), DEL, and the Unicode line and paragraph separators.
 const singleLine = (value: unknown, max: number): value is string =>
-  typeof value === "string" && value.trim().length > 0 && value.length <= max && !/[\x00-\x1f\x7f-\x9f\u2028\u2029]/.test(value);
+  typeof value === "string" &&
+  value.trim().length > 0 &&
+  value.length <= max &&
+  // biome-ignore lint/suspicious/noControlCharactersInRegex: the pattern deliberately matches control characters to reject or strip them
+  !/[\x00-\x1f\x7f-\x9f\u2028\u2029]/.test(value);
 const isoTime = (value: unknown): value is string =>
   typeof value === "string" && Number.isFinite(Date.parse(value)) && new Date(value).toISOString() === value;
 
 const parseEvent = (value: unknown): Event => {
-  if (typeof value !== "object" || value === null || Array.isArray(value)) throw new WorklogError("worklog record must be a JSON object");
+  if (typeof value !== "object" || value === null || Array.isArray(value))
+    throw new WorklogError("worklog record must be a JSON object");
   const record = value as Record<string, unknown>;
-  if (typeof record.id !== "string" || !ID.test(record.id)) throw new WorklogError('worklog field "id" must be 8 lowercase hex digits');
-  if (!isoTime(record.at)) throw new WorklogError('worklog field "at" must be an ISO time as toISOString writes it');
-  const fields: Record<string, Record<string, number>> = { add: { title: 200, source: 400 }, next: { text: 1000 }, note: { text: 1000 }, close: { result: 1000 } };
-  const wanted = typeof record.op === "string" ? fields[record.op] : undefined;
+  if (typeof record["id"] !== "string" || !ID.test(record["id"]))
+    throw new WorklogError('worklog field "id" must be 8 lowercase hex digits');
+  if (!isoTime(record["at"])) throw new WorklogError('worklog field "at" must be an ISO time as toISOString writes it');
+  const fields: Record<string, Record<string, number>> = {
+    add: { title: 200, source: 400 },
+    next: { text: 1000 },
+    note: { text: 1000 },
+    close: { result: 1000 },
+  };
+  const wanted = typeof record["op"] === "string" ? fields[record["op"]] : undefined;
   if (!wanted) throw new WorklogError('worklog field "op" must be add, next, note or close');
   const unknown = Object.keys(record).find((name) => !["op", "id", "at", ...Object.keys(wanted)].includes(name));
   if (unknown !== undefined) throw new WorklogError(`unknown worklog field "${unknown}"`);
   for (const [name, max] of Object.entries(wanted)) {
-    if (!singleLine(record[name], max)) throw new WorklogError(`worklog field "${name}" must be one nonempty line of at most ${max} characters`);
+    if (!singleLine(record[name], max))
+      throw new WorklogError(`worklog field "${name}" must be one nonempty line of at most ${max} characters`);
   }
   return record as Event;
 };
@@ -69,7 +94,12 @@ const ownedOrAbsent = (path: string, windows: boolean): boolean => {
  * beforeCheck runs between the temp write and that check. On Windows a rename refused while a concurrent writer or
  * reader has worklog.md open is retried.
  */
-export const publishWorklog = (path: string, markdown: string, beforeCheck: () => void = () => {}, retry: SyncRetryOps = realSyncRetry): boolean => {
+export const publishWorklog = (
+  path: string,
+  markdown: string,
+  beforeCheck: () => void = () => {},
+  retry: SyncRetryOps = realSyncRetry,
+): boolean => {
   const tmp = `${path}.${process.pid}.${randomUUID()}.tmp`;
   try {
     writeFileSync(tmp, markdown, { encoding: "utf8", mode: 0o600 });
@@ -90,7 +120,10 @@ export class Worklog {
   readonly path: string;
   readonly markdownPath: string;
 
-  constructor(readonly stateDir: string, private readonly retry: SyncRetryOps = realSyncRetry) {
+  constructor(
+    readonly stateDir: string,
+    private readonly retry: SyncRetryOps = realSyncRetry,
+  ) {
     this.path = join(stateDir, "worklog.jsonl");
     this.markdownPath = join(stateDir, "worklog.md");
   }
@@ -151,7 +184,13 @@ export class Worklog {
         const item = items.get(event.id);
         if (event.op === "add") {
           if (item) throw new WorklogError(`worklog item ${event.id} was already added`);
-          items.set(event.id, { id: event.id, title: event.title, source: event.source, openedAt: event.at, notes: [] });
+          items.set(event.id, {
+            id: event.id,
+            title: event.title,
+            source: event.source,
+            openedAt: event.at,
+            notes: [],
+          });
           continue;
         }
         if (!item) throw new WorklogError(`worklog item ${event.id} was never added`);
@@ -163,7 +202,8 @@ export class Worklog {
           continue;
         }
         if (event.op === "next") items.set(event.id, { ...item, next: event.text });
-        else if (event.op === "note") items.set(event.id, { ...item, notes: [...item.notes, { at: event.at, text: event.text }] });
+        else if (event.op === "note")
+          items.set(event.id, { ...item, notes: [...item.notes, { at: event.at, text: event.text }] });
         else items.set(event.id, { ...item, closedAt: event.at, result: event.result });
       } catch (error) {
         if (!(error instanceof WorklogError)) throw error;
@@ -194,7 +234,10 @@ export class Worklog {
   }
 
   private ensureOwnedMarkdown(): void {
-    if (!ownedOrAbsent(this.markdownPath, this.retry.windows)) throw new WorklogError(`${this.markdownPath} was not written by dori worklog; move it aside before using the command`);
+    if (!ownedOrAbsent(this.markdownPath, this.retry.windows))
+      throw new WorklogError(
+        `${this.markdownPath} was not written by dori worklog; move it aside before using the command`,
+      );
   }
 
   /** Rewrite worklog.md from the whole record. */
@@ -203,15 +246,20 @@ export class Worklog {
     // not land, so read and publish again, as for a record that grew, a bounded number of times.
     let refused = 0;
     let failed = false;
-    const text = renderUntilStable(() => readFileSync(this.path), (record) => {
-      failed = false;
-      try {
-        publishWorklog(this.markdownPath, renderWorklog(this.fold(record).items), undefined, this.retry);
-      } catch (error) {
-        if (!this.retry.windows || !isTransientWindowsError(error) || ++refused >= WINDOWS_PUBLISH_ROUNDS) throw error;
-        failed = true;
-      }
-    }, () => (failed ? -1 : statSync(this.path).size));
+    const text = renderUntilStable(
+      () => readFileSync(this.path),
+      (record) => {
+        failed = false;
+        try {
+          publishWorklog(this.markdownPath, renderWorklog(this.fold(record).items), undefined, this.retry);
+        } catch (error) {
+          if (!this.retry.windows || !isTransientWindowsError(error) || ++refused >= WINDOWS_PUBLISH_ROUNDS)
+            throw error;
+          failed = true;
+        }
+      },
+      () => (failed ? -1 : statSync(this.path).size),
+    );
     return this.fold(text);
   }
 }
@@ -222,7 +270,11 @@ export class Worklog {
  * to finish therefore always holds every record, without a lock. The sizes are compared in bytes as read: decoding a
  * line cut inside a multi-byte character changes its length, and the sizes would then never match.
  */
-export const renderUntilStable = (read: () => Buffer, publish: (record: string) => void, size: () => number): string => {
+export const renderUntilStable = (
+  read: () => Buffer,
+  publish: (record: string) => void,
+  size: () => number,
+): string => {
   for (;;) {
     const bytes = read();
     const record = bytes.toString("utf8");
@@ -231,19 +283,21 @@ export const renderUntilStable = (read: () => Buffer, publish: (record: string) 
   }
 };
 
-const itemBlock = (item: WorklogItem): string => [
-  `### ${item.id} ${item.title}`,
-  `- Source: ${item.source}`,
-  `- Opened: ${item.openedAt}`,
-  `- Next: ${item.next ?? "(none yet)"}`,
-  ...(item.notes.length ? ["- Notes:", ...item.notes.map((note) => `  - ${note.at} ${note.text}`)] : []),
-  ...(item.closedAt !== undefined ? [`- Closed: ${item.closedAt}`, `- Result: ${item.result ?? ""}`] : []),
-].join("\n");
+const itemBlock = (item: WorklogItem): string =>
+  [
+    `### ${item.id} ${item.title}`,
+    `- Source: ${item.source}`,
+    `- Opened: ${item.openedAt}`,
+    `- Next: ${item.next ?? "(none yet)"}`,
+    ...(item.notes.length ? ["- Notes:", ...item.notes.map((note) => `  - ${note.at} ${note.text}`)] : []),
+    ...(item.closedAt !== undefined ? [`- Closed: ${item.closedAt}`, `- Result: ${item.result ?? ""}`] : []),
+  ].join("\n");
 
 export const renderWorklog = (items: readonly WorklogItem[]): string => {
   const open = items.filter((item) => item.closedAt === undefined);
   const closed = items.filter((item) => item.closedAt !== undefined).reverse();
-  const section = (title: string, list: readonly WorklogItem[]) => `## ${title}\n\n${list.length ? list.map(itemBlock).join("\n\n") : "(none)"}\n`;
+  const section = (title: string, list: readonly WorklogItem[]) =>
+    `## ${title}\n\n${list.length ? list.map(itemBlock).join("\n\n") : "(none)"}\n`;
   return `${WORKLOG_MARKER}\n# Worklog\n\n${section("Open", open)}\n${section("Closed", closed)}`;
 };
 
@@ -251,6 +305,9 @@ export const worklogLines = (items: readonly WorklogItem[]): string[] => {
   const open = items.filter((item) => item.closedAt === undefined);
   return [
     `WORKLOG open=${open.length}`,
-    ...open.map((item) => `OPEN ${item.id} ${JSON.stringify(item.title)} source=${JSON.stringify(item.source)} next=${JSON.stringify(item.next ?? "")}`),
+    ...open.map(
+      (item) =>
+        `OPEN ${item.id} ${JSON.stringify(item.title)} source=${JSON.stringify(item.source)} next=${JSON.stringify(item.next ?? "")}`,
+    ),
   ];
 };

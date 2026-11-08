@@ -13,19 +13,24 @@ const sampleJson = (patch: Record<string, unknown> = {}): string =>
   JSON.stringify({
     freeKb: 4_000_000,
     totalKb: 16_000_000,
-    pageFiles: [{ sizeMb: 2048, usedMb: 512 }, { sizeMb: 1024, usedMb: 0 }],
+    pageFiles: [
+      { sizeMb: 2048, usedMb: 512 },
+      { sizeMb: 1024, usedMb: 0 },
+    ],
     queue: 2,
     cpuPct: 25,
     diskFreeBytes: 107_374_182_400,
     ...patch,
   });
 
-const winRunner = (ps: Ran, calls: string[][] = []): Runner => async (argv) => {
-  calls.push([...argv]);
-  if (argv[0] === "powershell.exe") return ps;
-  if (argv[0] === "herdr") return ok(panesJson);
-  return fail;
-};
+const winRunner =
+  (ps: Ran, calls: string[][] = []): Runner =>
+  async (argv) => {
+    calls.push([...argv]);
+    if (argv[0] === "powershell.exe") return ps;
+    if (argv[0] === "herdr") return ok(panesJson);
+    return fail;
+  };
 
 describe("parseWindowsSample", () => {
   test("derives load, memory, disk and swap", () => {
@@ -72,7 +77,13 @@ describe("sampleHost on windows", () => {
   });
   test("failed or garbage powershell keeps the unknown values and holds disk", async () => {
     for (const ps of [fail, ok("garbage"), { code: 1, out: sampleJson(), err: "x" }]) {
-      expect(await sampleHost(winRunner(ps), "/", win)).toEqual({ load1: 0, memFreePct: 100, diskFreeGb: 0, swapFreeGb: 0, panes: 3 });
+      expect(await sampleHost(winRunner(ps), "/", win)).toEqual({
+        load1: 0,
+        memFreePct: 100,
+        diskFreeGb: 0,
+        swapFreeGb: 0,
+        panes: 3,
+      });
     }
   });
 });
@@ -83,18 +94,40 @@ describe("sampleHost on macOS (unchanged)", () => {
     const run: Runner = async (argv) => {
       calls.push([...argv]);
       switch (argv[0]) {
-        case "sysctl": return ok(argv[2] === "vm.loadavg" ? "{ 3.50 2.00 1.00 }" : "total = 2048.00M  used = 1024.00M  free = 1024.00M  (encrypted)");
-        case "memory_pressure": return ok("System-wide memory free percentage: 42%");
-        case "df": return ok("Filesystem 1024-blocks Used Available Capacity\n/dev/disk1 1000 500 2097152 50% /");
-        case "herdr": return ok(panesJson);
-        default: return fail;
+        case "sysctl":
+          return ok(
+            argv[2] === "vm.loadavg"
+              ? "{ 3.50 2.00 1.00 }"
+              : "total = 2048.00M  used = 1024.00M  free = 1024.00M  (encrypted)",
+          );
+        case "memory_pressure":
+          return ok("System-wide memory free percentage: 42%");
+        case "df":
+          return ok("Filesystem 1024-blocks Used Available Capacity\n/dev/disk1 1000 500 2097152 50% /");
+        case "herdr":
+          return ok(panesJson);
+        default:
+          return fail;
       }
     };
-    expect(await sampleHost(run, "/", mac)).toEqual({ load1: 3.5, memFreePct: 42, diskFreeGb: 2, swapFreeGb: 1, panes: 3 });
+    expect(await sampleHost(run, "/", mac)).toEqual({
+      load1: 3.5,
+      memFreePct: 42,
+      diskFreeGb: 2,
+      swapFreeGb: 1,
+      panes: 3,
+    });
     expect(calls.map((c) => c[0])).not.toContain("powershell.exe");
   });
   test("linux load fallback and failure defaults", async () => {
-    const run: Runner = async (argv) => (argv[0] === "cat" ? ok("1.25 1 1 1/1 1") : argv[0] === "herdr" ? { code: 1, out: "", err: "" } : fail);
-    expect(await sampleHost(run, "/", mac)).toEqual({ load1: 1.25, memFreePct: 100, diskFreeGb: 0, swapFreeGb: 0, panes: -1 });
+    const run: Runner = async (argv) =>
+      argv[0] === "cat" ? ok("1.25 1 1 1/1 1") : argv[0] === "herdr" ? { code: 1, out: "", err: "" } : fail;
+    expect(await sampleHost(run, "/", mac)).toEqual({
+      load1: 1.25,
+      memFreePct: 100,
+      diskFreeGb: 0,
+      swapFreeGb: 0,
+      panes: -1,
+    });
   });
 });

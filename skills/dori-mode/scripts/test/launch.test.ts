@@ -12,12 +12,16 @@ test("posix quoting is unchanged: safe words stay bare, others get single quotes
 });
 
 test("pwsh single-quotes every argument and doubles ' and typographic quotes", () => {
-  expect(paneCommand(["bun", "it's \u2018x\u2019 \u201Ay\u201B"], "pwsh")).toBe("& 'bun' 'it''s \u2018\u2018x\u2019\u2019 \u201A\u201Ay\u201B\u201B'");
+  expect(paneCommand(["bun", "it's \u2018x\u2019 \u201Ay\u201B"], "pwsh")).toBe(
+    "& 'bun' 'it''s \u2018\u2018x\u2019\u2019 \u201A\u201Ay\u201B\u201B'",
+  );
   expect(paneCommand(tricky, "pwsh")).toContain("'C:\\Program Files\\a b'");
 });
 
 test("powershell 5.1 also escapes embedded double quotes, trailing backslashes and empty arguments", () => {
-  expect(paneCommand(["x", 'a"b', "", "c d\\", 'q\\"r'], "powershell")).toBe(`& 'x' 'a\\"b' '""' 'c d\\\\' 'q\\\\\\"r'`);
+  expect(paneCommand(["x", 'a"b', "", "c d\\", 'q\\"r'], "powershell")).toBe(
+    `& 'x' 'a\\"b' '""' 'c d\\\\' 'q\\\\\\"r'`,
+  );
 });
 
 test("powershell 5.1 keeps a quoted argument with a space whole: it would not wrap it, so the quotes stay balanced", () => {
@@ -40,11 +44,19 @@ test("shell names map from process names with or without .exe and path", () => {
   expect(shellFromProcess("bun.exe")).toBeUndefined();
 });
 
-const infoRunner = (procs: unknown[] | "bad"): Runner => async () => ({ code: 0, out: procs === "bad" ? "nope" : JSON.stringify({ result: { process_info: { foreground_processes: procs } } }), err: "" });
+const infoRunner =
+  (procs: unknown[] | "bad"): Runner =>
+  async () => ({
+    code: 0,
+    out: procs === "bad" ? "nope" : JSON.stringify({ result: { process_info: { foreground_processes: procs } } }),
+    err: "",
+  });
 
 test("auto detects the pane shell on Windows, falls back to pwsh, and is posix elsewhere", async () => {
   expect(await resolvePaneShell("auto", infoRunner([{ name: "cmd.exe" }]), "p1", true)).toBe("cmd");
-  expect(await resolvePaneShell(undefined, infoRunner([{ name: "x", argv0: "C:\\w\\powershell.exe" }]), "p1", true)).toBe("powershell");
+  expect(
+    await resolvePaneShell(undefined, infoRunner([{ name: "x", argv0: "C:\\w\\powershell.exe" }]), "p1", true),
+  ).toBe("powershell");
   expect(await resolvePaneShell("auto", infoRunner([{ name: "bash" }]), "p1", true)).toBe("posix");
   expect(await resolvePaneShell("auto", infoRunner([{ name: "bun.exe" }]), "p1", true)).toBe("pwsh");
   expect(await resolvePaneShell("auto", infoRunner("bad"), "p1", true)).toBe("pwsh");
@@ -53,7 +65,10 @@ test("auto detects the pane shell on Windows, falls back to pwsh, and is posix e
 });
 
 test("lastLines scrubs POSIX and Windows local paths and the home directory but not URLs", () => {
-  const screen = "see C:\\Users\\ana\\code\\x.txt and D:/work/y and /Users/bob/z\nhttps://example.com/a ok in C:\\Users\\ana";
-  expect(lastLines(screen, "C:\\Users\\ana")).toBe("see ~\\code\\x.txt and (local path) and (local path) / https://example.com/a ok in ~");
+  const screen =
+    "see C:\\Users\\ana\\code\\x.txt and D:/work/y and /Users/bob/z\nhttps://example.com/a ok in C:\\Users\\ana";
+  expect(lastLines(screen, "C:\\Users\\ana")).toBe(
+    "see ~\\code\\x.txt and (local path) and (local path) / https://example.com/a ok in ~",
+  );
   expect(lastLines("", "C:\\Users\\ana")).toBe("(blank)");
 });

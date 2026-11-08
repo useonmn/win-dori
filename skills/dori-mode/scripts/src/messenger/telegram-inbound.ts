@@ -47,8 +47,12 @@ export const envInt = (name: string, raw: string | undefined): number => {
  * The variable holding the owner's Telegram user id. windori's setup (dori setup telegram, install-profile.ps1) writes
  * DORI_TELEGRAM_OWNER to telegram.env; DORI_TELEGRAM_OWNER_ID is read first and named when neither is set.
  */
-export const telegramOwnerVar = (env: Readonly<Record<string, string | undefined>>): "DORI_TELEGRAM_OWNER_ID" | "DORI_TELEGRAM_OWNER" =>
-  env.DORI_TELEGRAM_OWNER_ID === undefined && env.DORI_TELEGRAM_OWNER !== undefined ? "DORI_TELEGRAM_OWNER" : "DORI_TELEGRAM_OWNER_ID";
+export const telegramOwnerVar = (
+  env: Readonly<Record<string, string | undefined>>,
+): "DORI_TELEGRAM_OWNER_ID" | "DORI_TELEGRAM_OWNER" =>
+  env["DORI_TELEGRAM_OWNER_ID"] === undefined && env["DORI_TELEGRAM_OWNER"] !== undefined
+    ? "DORI_TELEGRAM_OWNER"
+    : "DORI_TELEGRAM_OWNER_ID";
 
 export type TgInboundStore = { load(): number; save(offset: number): void };
 
@@ -101,8 +105,8 @@ export const fileTgInboundStore = (path: string): TgInboundStore => {
       }
     },
     save(offset: number): void {
-    // The state dir may not exist yet on a fresh install; without this the first save
-    // fails with ENOENT and the same update is re-printed every tick.
+      // The state dir may not exist yet on a fresh install; without this the first save
+      // fails with ENOENT and the same update is re-printed every tick.
       mkdirSync(dirname(path), { recursive: true });
       writeFileSync(path, String(offset));
     },
@@ -110,7 +114,12 @@ export const fileTgInboundStore = (path: string): TgInboundStore => {
 };
 
 type TgFile = { readonly file_id?: string };
-type TgUser = { readonly id: number; readonly is_bot?: boolean; readonly username?: string; readonly first_name?: string };
+type TgUser = {
+  readonly id: number;
+  readonly is_bot?: boolean;
+  readonly username?: string;
+  readonly first_name?: string;
+};
 type TgMessage = {
   readonly message_id?: number;
   readonly from?: TgUser;
@@ -137,7 +146,8 @@ type TgUpdate = { readonly update_id: number; readonly message?: TgMessage; read
  * (replies included) resolves to no thread — callers treat it as topic 1 — and a
  * private-chat topic message keeps its thread.
  */
-const threadOf = (m: TgMessage): number | undefined => (m.is_topic_message === true ? m.message_thread_id ?? 1 : undefined);
+const threadOf = (m: TgMessage): number | undefined =>
+  m.is_topic_message === true ? (m.message_thread_id ?? 1) : undefined;
 
 /** The largest photo variant is the last array element; file ids are unique per size. */
 const mediaOf = (m: TgMessage): TgMedia | undefined => {
@@ -150,7 +160,8 @@ const mediaOf = (m: TgMessage): TgMedia | undefined => {
     ["document", m.document],
     ["photo", m.photo?.[m.photo.length - 1]],
   ];
-  for (const [kind, f] of kinds) if (f?.file_id !== undefined) return { kind, fileId: f.file_id, messageId: m.message_id ?? 0 };
+  for (const [kind, f] of kinds)
+    if (f?.file_id !== undefined) return { kind, fileId: f.file_id, messageId: m.message_id ?? 0 };
   return undefined;
 };
 
@@ -170,7 +181,11 @@ export const pollTelegramInbound = async (
   opts: TgInboundOptions,
   emit: (inbound: TgInbound) => void = () => {},
 ): Promise<TgInbound[]> => {
-  const updates = await tg.call<readonly TgUpdate[]>("getUpdates", { offset: store.load(), timeout: 25, allowed_updates: ["message", "edited_message"] });
+  const updates = await tg.call<readonly TgUpdate[]>("getUpdates", {
+    offset: store.load(),
+    timeout: 25,
+    allowed_updates: ["message", "edited_message"],
+  });
   const out: TgInbound[] = [];
   for (const u of updates) {
     const kind: TgInboundKind = u.edited_message === undefined ? "message" : "edit";
@@ -178,7 +193,11 @@ export const pollTelegramInbound = async (
     let keep = false;
     if (m?.from && !m.from.is_bot && m.from.id === opts.ownerId) {
       if (m.chat?.type === "private" && Number(m.chat.id) === opts.ownerId) keep = true;
-      else if ((m.chat?.type === "group" || m.chat?.type === "supergroup") && opts.groupChatId !== undefined && Number(m.chat.id) === opts.groupChatId) {
+      else if (
+        (m.chat?.type === "group" || m.chat?.type === "supergroup") &&
+        opts.groupChatId !== undefined &&
+        Number(m.chat.id) === opts.groupChatId
+      ) {
         // De-conflict: in a forum group the Dori only ever listens to its own topic.
         // General counts as topic 1 — including replies there, whose reply-root id in
         // message_thread_id is not a topic id.
@@ -191,7 +210,7 @@ export const pollTelegramInbound = async (
       continue;
     }
     const source = m!.chat!.type === "private" ? "dm" : "topic";
-    const thread = source === "topic" ? threadOf(m!) ?? 1 : threadOf(m!);
+    const thread = source === "topic" ? (threadOf(m!) ?? 1) : threadOf(m!);
     const inbound: TgInbound = {
       kind,
       source,

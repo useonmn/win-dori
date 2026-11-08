@@ -3,9 +3,26 @@ import { readFileSync, writeFileSync } from "node:fs";
 import { randomUUID } from "node:crypto";
 import { cpus, freemem, loadavg, totalmem } from "node:os";
 import { join, resolve } from "node:path";
-import { Herdr, HerdrError, spawnExec, type AgentStatus, type Exec, omoScreenIdle, DeliveryUncertain } from "./herdr.ts";
+import {
+  Herdr,
+  HerdrError,
+  spawnExec,
+  type AgentStatus,
+  type Exec,
+  omoScreenIdle,
+  DeliveryUncertain,
+} from "./herdr.ts";
 import { appendArg, doriCommand, paneShell, type PaneShell } from "./shell.ts";
-import { KEY_RE, reservedKey, Store, type DeliveryAttempt, type HostLoad, type Lane, type QueuedMessage, type Role } from "./store.ts";
+import {
+  KEY_RE,
+  reservedKey,
+  Store,
+  type DeliveryAttempt,
+  type HostLoad,
+  type Lane,
+  type QueuedMessage,
+  type Role,
+} from "./store.ts";
 import { Telemetry, type MergeOutcome, type Usage } from "./telemetry.ts";
 
 export { KEY_RE, reservedKey };
@@ -43,7 +60,8 @@ export const defaultDeps = (shell: PaneShell = "posix"): Deps => {
 
 export class Refusal extends Error {}
 
-const sysctlMemoryLevel = (): string => execFileSync("sysctl", ["-n", "kern.memorystatus_level"], { encoding: "utf8", timeout: 2000 });
+const sysctlMemoryLevel = (): string =>
+  execFileSync("sysctl", ["-n", "kern.memorystatus_level"], { encoding: "utf8", timeout: 2000 });
 
 /**
  * Percent of memory available to start new work. On Linux, os.freemem() is MemAvailable. On macOS it is only the
@@ -75,13 +93,19 @@ const WINDOWS_LOAD_SCRIPT = [
 
 const sampleWindowsLoad = (): string => {
   const { PSModulePath: _inherited, ...env } = process.env;
-  return execFileSync("powershell.exe", ["-NoProfile", "-NonInteractive", "-Command", WINDOWS_LOAD_SCRIPT], { encoding: "utf8", timeout: 15_000, windowsHide: true, env });
+  return execFileSync("powershell.exe", ["-NoProfile", "-NonInteractive", "-Command", WINDOWS_LOAD_SCRIPT], {
+    encoding: "utf8",
+    timeout: 15_000,
+    windowsHide: true,
+    env,
+  });
 };
 
-const cpuTimes = () => cpus().reduce(
-  (t, { times: c }) => ({ idle: t.idle + c.idle, total: t.total + c.user + c.nice + c.sys + c.idle + c.irq }),
-  { idle: 0, total: 0 },
-);
+const cpuTimes = () =>
+  cpus().reduce(
+    (t, { times: c }) => ({ idle: t.idle + c.idle, total: t.total + c.user + c.nice + c.sys + c.idle + c.irq }),
+    { idle: 0, total: 0 },
+  );
 
 /** Share of CPU time in use over a short window, from the counters os.cpus() reports on every platform. */
 function busyShare(read = cpuTimes, sleep: (ms: number) => void = (ms) => Bun.sleepSync(ms)): number {
@@ -96,7 +120,11 @@ function busyShare(read = cpuTimes, sleep: (ms: number) => void = (ms) => Bun.sl
  * processor queue, which stands for the waiting work a load average counts. Without the queue the figure could never
  * pass the core count the hourly loop compares it with. An unreadable sample falls back to CPU use alone.
  */
-export function windowsLoad(cores: number, sample: () => string = sampleWindowsLoad, busy: () => number = busyShare): number {
+export function windowsLoad(
+  cores: number,
+  sample: () => string = sampleWindowsLoad,
+  busy: () => number = busyShare,
+): number {
   try {
     const { cpuPct, queue } = JSON.parse(sample()) as { cpuPct?: unknown; queue?: unknown };
     if (typeof cpuPct === "number") return (cpuPct / 100) * cores + (typeof queue === "number" ? queue : 0);
@@ -255,9 +283,19 @@ const NOTICE_FROM = "dori-delivery";
  * held and the lead is told once; held messages are never retried, so the notice is never repeated. A notice that
  * itself fails ambiguously is held without another notice, so this cannot loop.
  */
-async function recordUncertain(d: Deps, paneId: string, batch: readonly QueuedMessage[], e: DeliveryUncertain): Promise<void> {
+async function recordUncertain(
+  d: Deps,
+  paneId: string,
+  batch: readonly QueuedMessage[],
+  e: DeliveryUncertain,
+): Promise<void> {
   const detail = failureDetail(e);
-  settleInbox(d, paneId, batch, { at: d.now(), state: e.typed ? "typed" : "ambiguous", detail, ...(e.typed ? e.agent : {}) });
+  settleInbox(d, paneId, batch, {
+    at: d.now(),
+    state: e.typed ? "typed" : "ambiguous",
+    detail,
+    ...(e.typed ? e.agent : {}),
+  });
   if (!e.typed) await noticeHeld(d, paneId, batch, `herdr said: ${detail}`);
 }
 
@@ -276,26 +314,36 @@ async function noticeHeld(d: Deps, paneId: string, batch: readonly QueuedMessage
   try {
     await tellLead(d, text, NOTICE_FROM);
   } catch (err) {
-    process.stderr.write(`dori: telling the lead about the ambiguous delivery to ${paneId} failed too (${failureDetail(err)}); the notice is kept in the lead's inbox\n`);
+    process.stderr.write(
+      `dori: telling the lead about the ambiguous delivery to ${paneId} failed too (${failureDetail(err)}); the notice is kept in the lead's inbox\n`,
+    );
   }
 }
 
 // ---------- held entries (#108) ----------
 
-export type InboxEntry = { index: number; state: "queued" | "typed" | "held"; from: string; at: number; preview: string };
+export type InboxEntry = {
+  index: number;
+  state: "queued" | "typed" | "held";
+  from: string;
+  at: number;
+  preview: string;
+};
 
 const PREVIEW_CHARS = 60;
 
 /** A pane's queued messages, 1-based in inbox order. The text is never shown whole: its first 60 characters, JSON-escaped. */
 export function inboxList(d: Deps, target: string): { paneId: string; entries: InboxEntry[] } {
   const paneId = resolveTarget(d, target);
-  const entries = d.store.queued(paneId).map((m, i): InboxEntry => ({
-    index: i + 1,
-    state: m.attempt?.state === "ambiguous" ? "held" : m.attempt?.state === "typed" ? "typed" : "queued",
-    from: m.from,
-    at: m.at,
-    preview: JSON.stringify(m.text.slice(0, PREVIEW_CHARS)) + (m.text.length > PREVIEW_CHARS ? "..." : ""),
-  }));
+  const entries = d.store.queued(paneId).map(
+    (m, i): InboxEntry => ({
+      index: i + 1,
+      state: m.attempt?.state === "ambiguous" ? "held" : m.attempt?.state === "typed" ? "typed" : "queued",
+      from: m.from,
+      at: m.at,
+      preview: JSON.stringify(m.text.slice(0, PREVIEW_CHARS)) + (m.text.length > PREVIEW_CHARS ? "..." : ""),
+    }),
+  );
   return { paneId, entries };
 }
 
@@ -311,10 +359,17 @@ export function releaseHeld(d: Deps, target: string, index: number, how: "ack" |
   try {
     const msgs = d.store.queued(paneId);
     const m = Number.isInteger(index) ? msgs[index - 1] : undefined;
-    if (!m) throw new Refusal(`no entry ${index} in the inbox of ${paneId} (${msgs.length} entries; see dori inbox list ${target})`);
-    if (m.attempt?.state !== "ambiguous") throw new Refusal(`entry ${index} of ${paneId} is not held; only held entries can be acked or resent`);
+    if (!m)
+      throw new Refusal(
+        `no entry ${index} in the inbox of ${paneId} (${msgs.length} entries; see dori inbox list ${target})`,
+      );
+    if (m.attempt?.state !== "ambiguous")
+      throw new Refusal(`entry ${index} of ${paneId} is not held; only held entries can be acked or resent`);
     const { attempt: _, ...fresh } = m;
-    d.store.saveInbox(paneId, how === "ack" ? msgs.filter((_, i) => i !== index - 1) : msgs.map((x, i) => (i === index - 1 ? fresh : x)));
+    d.store.saveInbox(
+      paneId,
+      how === "ack" ? msgs.filter((_, i) => i !== index - 1) : msgs.map((x, i) => (i === index - 1 ? fresh : x)),
+    );
     return paneId;
   } finally {
     release();
@@ -354,7 +409,8 @@ export async function startLane(
   const reserved = reservedKey(key);
   if (reserved) throw new Refusal(reserved);
   const existing = d.store.lane(key);
-  if (existing && existing.status !== "done" && existing.status !== "lost") throw new Refusal(`lane ${key} is already open in ${existing.paneId}`);
+  if (existing && existing.status !== "done" && existing.status !== "lost")
+    throw new Refusal(`lane ${key} is already open in ${existing.paneId}`);
   const cwd = resolve(opts.cwd ?? process.cwd());
   const briefPath = d.store.briefPath(key);
   const footer = prompt("lane-footer.md", { key, dori: d.doriCmd });
@@ -371,8 +427,15 @@ export async function startLane(
 
   const now = d.now();
   const lane: Lane = {
-    key, paneId: pane.paneId, tabId: pane.tabId, brief: briefPath, cwd,
-    status: "working", createdAt: now, lastActivityAt: now, nudges: 0,
+    key,
+    paneId: pane.paneId,
+    tabId: pane.tabId,
+    brief: briefPath,
+    cwd,
+    status: "working",
+    createdAt: now,
+    lastActivityAt: now,
+    nudges: 0,
     log: [{ at: now, kind: "start", text: briefFile }],
   };
   d.store.saveLane(lane);
@@ -389,7 +452,12 @@ function openLane(d: Deps, key: string): Lane {
   return lane;
 }
 
-export async function report(d: Deps, key: string, text: string, status?: "working" | "waiting"): Promise<SendResult | undefined> {
+export async function report(
+  d: Deps,
+  key: string,
+  text: string,
+  status?: "working" | "waiting",
+): Promise<SendResult | undefined> {
   const lane = openLane(d, key);
   const now = d.now();
   lane.log.push({ at: now, kind: "report", text });
@@ -400,7 +468,12 @@ export async function report(d: Deps, key: string, text: string, status?: "worki
   return settled(tellLead(d, `[REPORT ${key}${status === "waiting" ? " WAITING" : ""}] ${text}`, key));
 }
 
-export async function ready(d: Deps, key: string, text: string, evidence: readonly string[]): Promise<SendResult | undefined> {
+export async function ready(
+  d: Deps,
+  key: string,
+  text: string,
+  evidence: readonly string[],
+): Promise<SendResult | undefined> {
   if (evidence.length === 0) throw new Refusal("READY needs at least one --evidence link (a PR, a receipt, a file)");
   if (!text.trim()) throw new Refusal("READY needs the final answer text");
   const lane = openLane(d, key);
@@ -454,15 +527,21 @@ export async function dutyTick(d: Deps): Promise<DutyEvent[]> {
       const result = await flushInbox(d, paneId);
       if (result === "delivered") events.push({ pane: paneId, action: "flushed" });
       if (result === "no-agent") {
-        events.push({ pane: paneId, action: "inbox-held", detail: `no agent in front; ${d.store.queued(paneId).length} message(s) kept` });
+        events.push({
+          pane: paneId,
+          action: "inbox-held",
+          detail: `no agent in front; ${d.store.queued(paneId).length} message(s) kept`,
+        });
       }
       // Held after an ambiguous delivery (#89): shown on every pass, resent never; the lead was told once.
       const held = d.store.queued(paneId).filter((m) => m.attempt?.state === "ambiguous").length;
-      if (held > 0) events.push({ pane: paneId, action: "delivery-ambiguous", detail: `${held} message(s) held, not resent` });
+      if (held > 0)
+        events.push({ pane: paneId, action: "delivery-ambiguous", detail: `${held} message(s) held, not resent` });
     } catch (e) {
       // One pane's failed delivery must never kill the loop for every other pane and lane.
       if (e instanceof Refusal) events.push({ pane: paneId, action: "inbox-target-gone" });
-      else if (e instanceof DeliveryUncertain && !e.typed) events.push({ pane: paneId, action: "delivery-ambiguous", detail: failureDetail(e) });
+      else if (e instanceof DeliveryUncertain && !e.typed)
+        events.push({ pane: paneId, action: "delivery-ambiguous", detail: failureDetail(e) });
       else events.push({ pane: paneId, action: "flush-failed", detail: failureDetail(e) });
     }
   }
@@ -492,10 +571,19 @@ export async function dutyTick(d: Deps): Promise<DutyEvent[]> {
       lane.log.push({ at: now, kind: "nudge", text: `idle ${Math.floor(idleMin)} min` });
       d.store.saveLane(lane);
       if (lane.nudges < NUDGE_MINUTES.length) {
-        await sendOrThrow(d, lane.key, prompt("nudge.md", { key: lane.key, minutes: String(Math.floor(idleMin)), dori: d.doriCmd }), "duty");
+        await sendOrThrow(
+          d,
+          lane.key,
+          prompt("nudge.md", { key: lane.key, minutes: String(Math.floor(idleMin)), dori: d.doriCmd }),
+          "duty",
+        );
         events.push({ lane: lane.key, action: `nudge-${lane.nudges}` });
       } else {
-        await tellLead(d, `[ESCALATE ${lane.key}] idle ${Math.floor(idleMin)} min with no READY after ${lane.nudges - 1} nudges`, "duty");
+        await tellLead(
+          d,
+          `[ESCALATE ${lane.key}] idle ${Math.floor(idleMin)} min with no READY after ${lane.nudges - 1} nudges`,
+          "duty",
+        );
         events.push({ lane: lane.key, action: "escalated" });
       }
     } catch (e) {
@@ -537,7 +625,11 @@ export async function headSha(d: Deps, pr: PrRef): Promise<string> {
 }
 
 /** Runs a fresh, non-interactive reviewer session pinned to the PR head and records its verdict as a receipt. */
-export async function review(d: Deps, prId: string, model?: string): Promise<{ verdict: "CLEAR" | "BLOCK"; sha: string }> {
+export async function review(
+  d: Deps,
+  prId: string,
+  model?: string,
+): Promise<{ verdict: "CLEAR" | "BLOCK"; sha: string }> {
   const pr = parsePr(prId);
   const sha = await headSha(d, pr);
   const text = prompt("review.md", { pr: pr.id, repo: pr.repo, number: String(pr.number), sha });
@@ -549,14 +641,22 @@ export async function review(d: Deps, prId: string, model?: string): Promise<{ v
     const name = `${pr.id.replaceAll("/", "__").replace("#", "_")}@${sha}-${randomUUID()}.noverdict.txt`;
     const diagnostic = join(d.store.root, "receipts", name);
     writeFileSync(diagnostic, res.stdout.split(/\r?\n/).slice(-200).join("\n"), { flag: "wx", mode: 0o600 });
-    const reason = res.code === 0
-      ? "reviewer printed no VERDICT line"
-      : `reviewer exited ${res.code}: ${res.stderr.trim() || "no VERDICT line in its output"}`;
+    const reason =
+      res.code === 0
+        ? "reviewer printed no VERDICT line"
+        : `reviewer exited ${res.code}: ${res.stderr.trim() || "no VERDICT line in its output"}`;
     throw new Error(`${reason}; no receipt written; reviewer output saved to ${diagnostic}`);
   }
   if (res.code !== 0) throw new Error(`reviewer exited ${res.code}: ${res.stderr.trim()}`);
   const verdict = last[1] as "CLEAR" | "BLOCK";
-  d.store.saveReceipt({ pr: pr.id, sha, verdict, model: model ?? "default", at: d.now(), summary: res.stdout.trim().slice(-4000) });
+  d.store.saveReceipt({
+    pr: pr.id,
+    sha,
+    verdict,
+    model: model ?? "default",
+    at: d.now(),
+    summary: res.stdout.trim().slice(-4000),
+  });
   d.usage.record({ name: "dori.review_completed", verdict });
   return { verdict, sha };
 }

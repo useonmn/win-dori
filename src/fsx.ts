@@ -33,7 +33,8 @@ export const retrying = <T>(op: () => T, ops: FsOps = realFsOps): T => {
   }
 };
 
-export const renameRetrying = (from: string, to: string, ops: FsOps = realFsOps): void => retrying(() => ops.rename(from, to), ops);
+export const renameRetrying = (from: string, to: string, ops: FsOps = realFsOps): void =>
+  retrying(() => ops.rename(from, to), ops);
 
 /** Removes a file that may still be held; one that stays held is left behind rather than failing the work it served. */
 export const removeFile = (path: string, ops: FsOps = realFsOps): void => {

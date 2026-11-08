@@ -1,5 +1,12 @@
 import { describe, expect, test } from "bun:test";
-import { DeliveryUncertain, Herdr, HerdrError, interactiveShellInFront, type Exec, type ExecResult } from "../src/herdr.ts";
+import {
+  DeliveryUncertain,
+  Herdr,
+  HerdrError,
+  interactiveShellInFront,
+  type Exec,
+  type ExecResult,
+} from "../src/herdr.ts";
 import { quoteArg } from "../src/shell.ts";
 
 // A recorder in place of the herdr binary: every argv is kept, and each reply is chosen per call.
@@ -43,18 +50,52 @@ describe("herdr argv", () => {
     await h.split("w1:p1", "/w", { DORI_ROLE: "duty" });
     expect(r.calls).toEqual([
       ["workspace", "create", "--label", "dori", "--cwd", "/w", "--no-focus"],
-      ["tab", "create", "--label", "fix-login", "--cwd", "/w", "--no-focus", "--workspace", "w3", "--env", "DORI_LANE=fix-login", "--env", "NOTE=a b"],
+      [
+        "tab",
+        "create",
+        "--label",
+        "fix-login",
+        "--cwd",
+        "/w",
+        "--no-focus",
+        "--workspace",
+        "w3",
+        "--env",
+        "DORI_LANE=fix-login",
+        "--env",
+        "NOTE=a b",
+      ],
       ["tab", "create", "--label", "other", "--cwd", "/w", "--no-focus"],
-      ["pane", "split", "w1:p1", "--direction", "down", "--ratio", "0.3", "--cwd", "/w", "--no-focus", "--env", "DORI_ROLE=duty"],
+      [
+        "pane",
+        "split",
+        "w1:p1",
+        "--direction",
+        "down",
+        "--ratio",
+        "0.3",
+        "--cwd",
+        "/w",
+        "--no-focus",
+        "--env",
+        "DORI_ROLE=duty",
+      ],
     ]);
   });
 
   test("a message is one argv element, delivered verbatim: quotes, $(...) and newlines are never expanded", async () => {
-    const r = recorder((argv) => ok(argv[1] === "process-info" ? { process_info: { foreground_processes: [{ name: "omo", argv: ["omo"] }] } } : {}));
+    const r = recorder((argv) =>
+      ok(
+        argv[1] === "process-info" ? { process_info: { foreground_processes: [{ name: "omo", argv: ["omo"] }] } } : {},
+      ),
+    );
     const h = new Herdr(r.exec, "");
     const text = `it's "done" $(rm -rf ~) \`id\`\nline two`;
     expect(await h.deliver("w1:p1", text)).toBe(true);
-    expect(r.calls).toEqual([["pane", "process-info", "--pane", "w1:p1"], ["agent", "prompt", "w1:p1", text]]);
+    expect(r.calls).toEqual([
+      ["pane", "process-info", "--pane", "w1:p1"],
+      ["agent", "prompt", "w1:p1", text],
+    ]);
   });
 });
 
@@ -68,7 +109,9 @@ describe("herdr replies", () => {
     const onStdout = new Herdr(recorder(() => fail("", '{"error":{"code":"pane_not_found"}}\n')).exec, "iso");
     const e = await onStdout.close("w1:p7").catch((x: unknown) => x);
     expect(e).toBeInstanceOf(HerdrError);
-    expect((e as HerdrError).message).toBe('herdr --session iso pane close w1:p7 failed (1): {"error":{"code":"pane_not_found"}}');
+    expect((e as HerdrError).message).toBe(
+      'herdr --session iso pane close w1:p7 failed (1): {"error":{"code":"pane_not_found"}}',
+    );
     const onStderr = new Herdr(recorder(() => fail("socket closed", "partial")).exec, "");
     await expect(onStderr.read("w1:p7")).rejects.toThrow("failed (1): socket closed");
   });
@@ -82,15 +125,16 @@ describe("herdr replies", () => {
     const status = (reply: ExecResult) => new Herdr(recorder(() => reply).exec, "").status("w1:p1");
     expect(await status(fail('{"error":{"code":"pane_not_found","message":"pane w1:p1 not found"}}'))).toBe("gone");
     expect(await status(ok({}))).toBe("gone");
-    await expect(status(fail('{"error":{"code":"server_not_running","message":"no herdr server is running"}}'))).rejects.toThrow(
-      "server_not_running",
-    );
+    await expect(
+      status(fail('{"error":{"code":"server_not_running","message":"no herdr server is running"}}')),
+    ).rejects.toThrow("server_not_running");
   });
 
   test("status: no agent is a shell; herdr's four states pass through and anything else is unknown", async () => {
     const status = (p: Record<string, unknown>) => new Herdr(recorder(() => ok({ pane: p })).exec, "").status("w1:p1");
     expect(await status({ agent: null, agent_status: "idle" })).toBe("shell");
-    for (const s of ["idle", "working", "blocked", "done"] as const) expect(await status({ agent: "omo", agent_status: s })).toBe(s);
+    for (const s of ["idle", "working", "blocked", "done"] as const)
+      expect(await status({ agent: "omo", agent_status: s })).toBe(s);
     expect(await status({ agent: "omo", agent_status: "compacting" })).toBe("unknown");
     expect(await status({ agent: "omo" })).toBe("unknown");
   });
@@ -107,14 +151,22 @@ describe.skipIf(!Bun.which("sh"))("quoteArg posix (upstream's shq)", () => {
 });
 
 describe("interactiveShellInFront (#66: a suspended agent leaves its shell in front)", () => {
-  const front = (...procs: { name?: string; argv?: string[] }[]) => interactiveShellInFront({ foreground_processes: procs });
+  const front = (...procs: { name?: string; argv?: string[] }[]) =>
+    interactiveShellInFront({ foreground_processes: procs });
   test.each([
     ["login shell", [{ name: "-bash", argv: ["-bash"] }], true],
     ["interactive zsh by path, upper case", [{ name: "/bin/ZSH", argv: ["/bin/zsh", "-i"] }], true],
     ["bash -C (noclobber) is still interactive", [{ name: "bash", argv: ["bash", "-C"] }], true],
     ["busybox sh applet", [{ name: "busybox", argv: ["busybox", "sh"] }], true],
     ["shell entry without argv", [{ name: "fish" }], true],
-    ["agent with a sh -c child", [{ name: "omo", argv: ["omo"] }, { name: "sh", argv: ["sh", "-c", "sleep 1"] }], false],
+    [
+      "agent with a sh -c child",
+      [
+        { name: "omo", argv: ["omo"] },
+        { name: "sh", argv: ["sh", "-c", "sleep 1"] },
+      ],
+      false,
+    ],
     ["shell running a script is held, the safe side", [{ name: "bash", argv: ["bash", "tool.sh"] }], true],
     ["interactive bash with --rcfile FILE", [{ name: "bash", argv: ["bash", "--rcfile", "/tmp/rc"] }], true],
     ["interactive zsh with -o OPT", [{ name: "zsh", argv: ["zsh", "-o", "vi"] }], true],
@@ -126,7 +178,11 @@ describe("interactiveShellInFront (#66: a suspended agent leaves its shell in fr
     ["bash -ic cmd runs a command", [{ name: "bash", argv: ["bash", "-ic", "make"] }], false],
     ["pwsh -EncodedCommand", [{ name: "pwsh", argv: ["pwsh", "-EncodedCommand", "ZQBjAGgAbwA="] }], false],
     ["pwsh -Interactive", [{ name: "pwsh", argv: ["pwsh", "-Interactive"] }], true],
-    ["pwsh -NoProfile -ExecutionPolicy Bypass", [{ name: "pwsh", argv: ["pwsh", "-NoProfile", "-ExecutionPolicy", "Bypass"] }], true],
+    [
+      "pwsh -NoProfile -ExecutionPolicy Bypass",
+      [{ name: "pwsh", argv: ["pwsh", "-NoProfile", "-ExecutionPolicy", "Bypass"] }],
+      true,
+    ],
     ["pwsh -NoExit -Command keeps a prompt", [{ name: "pwsh", argv: ["pwsh", "-NoExit", "-Command", "ls"] }], true],
     ["pwsh -noex -c keeps a prompt", [{ name: "pwsh", argv: ["pwsh", "-noex", "-c", "ls"] }], true],
     ["pwsh --noexi -Command keeps a prompt", [{ name: "pwsh", argv: ["pwsh", "--noexi", "-Command", "ls"] }], true],
@@ -134,14 +190,34 @@ describe("interactiveShellInFront (#66: a suspended agent leaves its shell in fr
     ["pwsh -Command", [{ name: "pwsh", argv: ["pwsh", "-Command", "ls"] }], false],
     ["exec'd agent", [{ name: "bun", argv: ["bun", "omo.js"] }], false],
     ["pwsh.exe -NoExit", [{ name: "pwsh.exe", argv: ["pwsh.exe", "-NoExit"] }], true],
-    ["powershell.exe by Windows path, -noex -Command", [{ name: "C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe", argv: ["C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe", "-noex", "-Command", "x"] }], true],
-    ["PWSH.EXE /NoExit /Command keeps a prompt", [{ name: "PWSH.EXE", argv: ["PWSH.EXE", "/NoExit", "/Command", "x"] }], true],
+    [
+      "powershell.exe by Windows path, -noex -Command",
+      [
+        {
+          name: "C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe",
+          argv: ["C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe", "-noex", "-Command", "x"],
+        },
+      ],
+      true,
+    ],
+    [
+      "PWSH.EXE /NoExit /Command keeps a prompt",
+      [{ name: "PWSH.EXE", argv: ["PWSH.EXE", "/NoExit", "/Command", "x"] }],
+      true,
+    ],
     ["pwsh.exe /c runs a command", [{ name: "pwsh.exe", argv: ["pwsh.exe", "/c", "x"] }], false],
     ["cmd.exe /c dir runs a command", [{ name: "cmd.exe", argv: ["cmd.exe", "/c", "dir"] }], false],
     ["cmd.exe /C, upper case", [{ name: "C:\\Windows\\system32\\cmd.exe", argv: ["cmd", "/C", "dir"] }], false],
     ["interactive cmd.exe", [{ name: "cmd.exe", argv: ["cmd.exe"] }], true],
     ["cmd.exe /k keeps a prompt", [{ name: "cmd.exe", argv: ["cmd.exe", "/k", "x"] }], true],
-    ["agent .exe with a cmd /c child", [{ name: "claude.exe", argv: ["claude.exe"] }, { name: "cmd.exe", argv: ["cmd.exe", "/d", "/s", "/c", "x"] }], false],
+    [
+      "agent .exe with a cmd /c child",
+      [
+        { name: "claude.exe", argv: ["claude.exe"] },
+        { name: "cmd.exe", argv: ["cmd.exe", "/d", "/s", "/c", "x"] },
+      ],
+      false,
+    ],
   ] as const)("%s", (_, procs, want) => {
     expect(front(...(procs as unknown as { name?: string; argv?: string[] }[]))).toBe(want);
   });
@@ -154,37 +230,64 @@ describe("interactiveShellInFront (#66: a suspended agent leaves its shell in fr
 
 // herdr 0.9.5 on Windows lists only the pane's own shell, even while an agent runs inside it (captured live).
 const paneShellOnly = {
-  shell_pid: 18440, foreground_process_group_id: 18440,
-  foreground_processes: [{ name: "pwsh.exe", pid: 18440, argv: ["C:\\Program Files\\PowerShell\\7\\pwsh.exe", "-NoExit", "-Command", "hook"] }],
+  shell_pid: 18440,
+  foreground_process_group_id: 18440,
+  foreground_processes: [
+    {
+      name: "pwsh.exe",
+      pid: 18440,
+      argv: ["C:\\Program Files\\PowerShell\\7\\pwsh.exe", "-NoExit", "-Command", "hook"],
+    },
+  ],
 };
 
 describe("Windows: process-info lists only the pane's own shell", () => {
   test("herdr's agent status decides: an agent delivers, no agent holds", () => {
-    for (const s of ["idle", "working", "blocked", "done", "unknown"] as const) expect(interactiveShellInFront(paneShellOnly, s)).toBe(false);
+    for (const s of ["idle", "working", "blocked", "done", "unknown"] as const)
+      expect(interactiveShellInFront(paneShellOnly, s)).toBe(false);
     expect(interactiveShellInFront(paneShellOnly, "shell")).toBe(true);
     expect(interactiveShellInFront(paneShellOnly, "gone")).toBe(true);
   });
 
   test("without the Windows status, or with any process besides the pane shell, the shell rule decides", () => {
     expect(interactiveShellInFront(paneShellOnly)).toBe(true);
-    const child = { ...paneShellOnly, foreground_processes: [...paneShellOnly.foreground_processes, { name: "bash.exe", pid: 9, argv: ["bash.exe"] }] };
+    const child = {
+      ...paneShellOnly,
+      foreground_processes: [...paneShellOnly.foreground_processes, { name: "bash.exe", pid: 9, argv: ["bash.exe"] }],
+    };
     expect(interactiveShellInFront(child, "idle")).toBe(true);
   });
 
   const deliverInto = async (windows: boolean, agent: Record<string, unknown>) => {
     const r = recorder((argv) =>
-      ok(argv[1] === "process-info" ? { process_info: paneShellOnly } : argv[1] === "get" ? { pane: { pane_id: "w1:p1", ...agent } } : {}));
+      ok(
+        argv[1] === "process-info"
+          ? { process_info: paneShellOnly }
+          : argv[1] === "get"
+            ? { pane: { pane_id: "w1:p1", ...agent } }
+            : {},
+      ),
+    );
     const delivered = await new Herdr(r.exec, "", windows).deliver("w1:p1", "hi");
     return { delivered, prompted: r.calls.some((c) => c[0] === "agent") };
   };
 
   test("on Windows an omo in a pwsh -NoExit pane gets the prompt; a pane with no agent gets nothing", async () => {
-    expect(await deliverInto(true, { agent: "omo", agent_status: "idle" })).toEqual({ delivered: true, prompted: true });
-    expect(await deliverInto(true, { agent: null, agent_status: "idle" })).toEqual({ delivered: false, prompted: false });
+    expect(await deliverInto(true, { agent: "omo", agent_status: "idle" })).toEqual({
+      delivered: true,
+      prompted: true,
+    });
+    expect(await deliverInto(true, { agent: null, agent_status: "idle" })).toEqual({
+      delivered: false,
+      prompted: false,
+    });
   });
 
   test("off Windows the same process-info is a shell in front and holds, as upstream", async () => {
-    expect(await deliverInto(false, { agent: "omo", agent_status: "idle" })).toEqual({ delivered: false, prompted: false });
+    expect(await deliverInto(false, { agent: "omo", agent_status: "idle" })).toEqual({
+      delivered: false,
+      prompted: false,
+    });
   });
 });
 
@@ -199,15 +302,26 @@ describe("delivery failures", () => {
   });
 
   test("any other failed prompt is still uncertain", async () => {
-    const h = new Herdr(recorder((argv) => (argv[0] === "agent" ? { code: 126, stdout: "", stderr: "boom" } : ok(omoFront))).exec, "");
+    const h = new Herdr(
+      recorder((argv) => (argv[0] === "agent" ? { code: 126, stdout: "", stderr: "boom" } : ok(omoFront))).exec,
+      "",
+    );
     await expect(h.deliver("w1:p1", "x")).rejects.toBeInstanceOf(DeliveryUncertain);
   });
 
   test("a refused send-text in the typed fallback is a plain failure too", async () => {
-    const h = new Herdr(recorder((argv) =>
-      argv[0] === "agent" ? fail('{"error":{"code":"agent_not_ready"}}')
-      : argv[1] === "send-text" ? { code: 126, stdout: "", stderr: "refused", refused: true }
-      : argv[1] === "get" ? ok({ pane: { agent: "omo", agent_status: "idle" } }) : ok(omoFront)).exec, "");
+    const h = new Herdr(
+      recorder((argv) =>
+        argv[0] === "agent"
+          ? fail('{"error":{"code":"agent_not_ready"}}')
+          : argv[1] === "send-text"
+            ? { code: 126, stdout: "", stderr: "refused", refused: true }
+            : argv[1] === "get"
+              ? ok({ pane: { agent: "omo", agent_status: "idle" } })
+              : ok(omoFront),
+      ).exec,
+      "",
+    );
     const e = await h.deliver("w1:p1", "x").catch((x: unknown) => x);
     expect(e).toBeInstanceOf(HerdrError);
     expect(e).not.toBeInstanceOf(DeliveryUncertain);

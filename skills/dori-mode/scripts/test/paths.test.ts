@@ -20,11 +20,19 @@ test("git's forward-slash paths and Windows backslash paths compare equal on Win
 });
 
 test("home and other local paths are scrubbed in POSIX and Windows form, URLs are left alone", () => {
-  expect(scrubLocalPaths("tests green on C:\\Users\\ana\\repo, PR open", "C:\\Users\\ana")).toBe("tests green on ~\\repo, PR open");
+  expect(scrubLocalPaths("tests green on C:\\Users\\ana\\repo, PR open", "C:\\Users\\ana")).toBe(
+    "tests green on ~\\repo, PR open",
+  );
   expect(scrubLocalPaths("see c:/users/ana/repo", "C:\\Users\\ana")).toBe("see ~/repo");
-  expect(scrubLocalPaths("log at D:\\work\\x.log and \\\\server\\share\\f", "")).toBe("log at (local path) and (local path)");
+  expect(scrubLocalPaths("log at D:\\work\\x.log and \\\\server\\share\\f", "")).toBe(
+    "log at (local path) and (local path)",
+  );
   expect(scrubLocalPaths("at /home/test/repo", "/home/test")).toBe("at ~/repo");
   expect(scrubLocalPaths("at /Users/bob/x", "/home/test")).toBe("at (local path)");
-  expect(scrubLocalPaths("merged https://github.com/acme/app/pull/1", "")).toBe("merged https://github.com/acme/app/pull/1");
-  expect(scrubLocalPaths("built D:\\x\\y, then (see E:\\log.txt).", "")).toBe("built (local path), then (see (local path)).");
+  expect(scrubLocalPaths("merged https://github.com/acme/app/pull/1", "")).toBe(
+    "merged https://github.com/acme/app/pull/1",
+  );
+  expect(scrubLocalPaths("built D:\\x\\y, then (see E:\\log.txt).", "")).toBe(
+    "built (local path), then (see (local path)).",
+  );
 });

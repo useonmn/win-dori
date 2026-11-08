@@ -44,7 +44,9 @@ const encodedCommand = (script: string): string => Buffer.from(script, "utf16le"
 // expression that stays on one line.
 const psArg = (s: string): string => {
   if (!/[\r\n]/.test(s)) return psLiteral(s);
-  const parts = s.split(/(\r\n|\r|\n)/).map((p, i) => (i % 2 ? `"${p.replace("\r", "`r").replace("\n", "`n")}"` : psLiteral(p)));
+  const parts = s
+    .split(/(\r\n|\r|\n)/)
+    .map((p, i) => (i % 2 ? `"${p.replace("\r", "`r").replace("\n", "`n")}"` : psLiteral(p)));
   return `(${parts.join("+")})`;
 };
 
@@ -104,7 +106,11 @@ export const shellFromProcess = (name: string): PaneShell | undefined => {
 type ProcessInfo = {
   readonly result?: {
     readonly process_info?: {
-      readonly foreground_processes?: readonly { readonly name?: string; readonly argv0?: string; readonly argv?: readonly string[] }[];
+      readonly foreground_processes?: readonly {
+        readonly name?: string;
+        readonly argv0?: string;
+        readonly argv?: readonly string[];
+      }[];
     };
   };
 };

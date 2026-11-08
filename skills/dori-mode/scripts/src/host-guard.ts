@@ -31,7 +31,7 @@ export const windowsSampleScript = (drive: string): string =>
     "$o=Get-CimInstance Win32_OperatingSystem",
     "$pf=@(Get-CimInstance Win32_PageFileUsage)",
     "$q=@();$c=@();1..5|ForEach-Object{$q+=(Get-CimInstance Win32_PerfFormattedData_PerfOS_System).ProcessorQueueLength;$c+=(Get-CimInstance Win32_PerfFormattedData_PerfOS_Processor -Filter \"Name='_Total'\").PercentProcessorTime;if($_ -lt 5){Start-Sleep -Milliseconds 250}}",
-    `$d=Get-CimInstance Win32_LogicalDisk -Filter \"DeviceID='${drive}'\"`,
+    `$d=Get-CimInstance Win32_LogicalDisk -Filter "DeviceID='${drive}'"`,
     "ConvertTo-Json -Compress -Depth 4 -InputObject ([pscustomobject]@{freeKb=$o.FreePhysicalMemory;totalKb=$o.TotalVisibleMemorySize;pageFiles=@($pf|ForEach-Object{[pscustomobject]@{sizeMb=$_.AllocatedBaseSize;usedMb=$_.CurrentUsage}});queue=($q|Measure-Object -Average).Average;cpuPct=($c|Measure-Object -Average).Average;diskFreeBytes=$d.FreeSpace})",
   ].join(";");
 
@@ -47,16 +47,21 @@ export const parseWindowsSample = (json: string, cpus: number): Omit<HostSample,
   } catch {
     return null;
   }
-  const free = field(o.freeKb);
-  const total = field(o.totalKb);
-  const cpu = field(o.cpuPct);
-  const queue = field(o.queue);
-  const disk = field(o.diskFreeBytes);
-  const pf = o.pageFiles === undefined || o.pageFiles === null ? [] : Array.isArray(o.pageFiles) ? o.pageFiles : [o.pageFiles];
+  const free = field(o["freeKb"]);
+  const total = field(o["totalKb"]);
+  const cpu = field(o["cpuPct"]);
+  const queue = field(o["queue"]);
+  const disk = field(o["diskFreeBytes"]);
+  const pf =
+    o["pageFiles"] === undefined || o["pageFiles"] === null
+      ? []
+      : Array.isArray(o["pageFiles"])
+        ? o["pageFiles"]
+        : [o["pageFiles"]];
   const swapMb = pf.reduce<number>((a, e) => {
     const r = (e ?? {}) as Record<string, unknown>;
-    const size = field(r.sizeMb);
-    const used = field(r.usedMb);
+    const size = field(r["sizeMb"]);
+    const used = field(r["usedMb"]);
     return size === undefined || used === undefined ? a : a + Math.max(0, size - used);
   }, 0);
   return {
@@ -73,8 +78,19 @@ const herdrPanes = async (run: Runner): Promise<number> => {
 };
 
 const sampleWindows = async (run: Runner, dataPath: string, env: HostEnv): Promise<HostSample> => {
-  const r = await run(["powershell.exe", "-NoProfile", "-NonInteractive", "-Command", windowsSampleScript(windowsDrive(dataPath, env.home))]);
-  const s = (r.code === 0 ? parseWindowsSample(r.out, env.cpus) : null) ?? { load1: 0, memFreePct: 100, diskFreeGb: 0, swapFreeGb: 0 };
+  const r = await run([
+    "powershell.exe",
+    "-NoProfile",
+    "-NonInteractive",
+    "-Command",
+    windowsSampleScript(windowsDrive(dataPath, env.home)),
+  ]);
+  const s = (r.code === 0 ? parseWindowsSample(r.out, env.cpus) : null) ?? {
+    load1: 0,
+    memFreePct: 100,
+    diskFreeGb: 0,
+    swapFreeGb: 0,
+  };
   return { ...s, panes: await herdrPanes(run) };
 };
 
@@ -82,17 +98,24 @@ export const sampleHost = async (run: Runner, dataPath = "/", env: HostEnv = rea
   if (env.windows) return sampleWindows(run, dataPath, env);
   const load = await run(["sysctl", "-n", "vm.loadavg"]);
   const loadLinux = load.code === 0 ? null : await run(["cat", "/proc/loadavg"]);
-  const load1 = num((load.code === 0 ? load.out.replace(/[{}]/g, "").trim() : loadLinux?.out ?? "").split(/\s+/)[0], 0);
+  const load1 = num(
+    (load.code === 0 ? load.out.replace(/[{}]/g, "").trim() : (loadLinux?.out ?? "")).split(/\s+/)[0],
+    0,
+  );
   const mp = await run(["memory_pressure", "-Q"]);
   const memInfo = mp.code === 0 ? null : await run(["cat", "/proc/meminfo"]);
   const kb = (key: string): number | null => {
     const m = new RegExp(`^${key}:\\s+(\\d+)`, "m").exec(memInfo?.out ?? "");
     return m ? Number(m[1]) : null;
   };
-  const total = kb("MemTotal"), available = kb("MemAvailable");
-  const memFreePct = mp.code === 0
-    ? num(/free percentage: (\d+)%/.exec(mp.out)?.[1], 100)
-    : total !== null && total > 0 && available !== null ? Math.round((available / total) * 100) : 100;
+  const total = kb("MemTotal"),
+    available = kb("MemAvailable");
+  const memFreePct =
+    mp.code === 0
+      ? num(/free percentage: (\d+)%/.exec(mp.out)?.[1], 100)
+      : total !== null && total > 0 && available !== null
+        ? Math.round((available / total) * 100)
+        : 100;
   const df = await run(["df", "-k", dataPath]);
   const diskFreeGb = num(df.out.split("\n").at(-1)?.trim().split(/\s+/)[3], 0) / 1_048_576;
   const swap = await run(["sysctl", "-n", "vm.swapusage"]);
@@ -117,14 +140,20 @@ export const guardTick = (s: HostSample, t: GuardThresholds, state: GuardState):
   const reasons = alertReasons(s, t);
   const alerting = reasons.length > 0;
   if (alerting !== state.alerting) {
-    out.push(alerting
-      ? `HOST_GUARD ALERT ${reasons.join(" | ")}`
-      : `HOST_GUARD CLEAR load ${s.load1.toFixed(0)}, memory free ${s.memFreePct}%, disk free ${s.diskFreeGb.toFixed(0)} GB, swap free ${s.swapFreeGb.toFixed(1)} GB`);
+    out.push(
+      alerting
+        ? `HOST_GUARD ALERT ${reasons.join(" | ")}`
+        : `HOST_GUARD CLEAR load ${s.load1.toFixed(0)}, memory free ${s.memFreePct}%, disk free ${s.diskFreeGb.toFixed(0)} GB, swap free ${s.swapFreeGb.toFixed(1)} GB`,
+    );
     state.alerting = alerting;
   }
   const ready = s.load1 < t.loadOk;
   if (ready !== state.computeReady) {
-    out.push(ready ? `HOST_GUARD COMPUTE_READY load ${s.load1.toFixed(0)} < ${t.loadOk}` : `HOST_GUARD COMPUTE_BUSY load ${s.load1.toFixed(0)}`);
+    out.push(
+      ready
+        ? `HOST_GUARD COMPUTE_READY load ${s.load1.toFixed(0)} < ${t.loadOk}`
+        : `HOST_GUARD COMPUTE_BUSY load ${s.load1.toFixed(0)}`,
+    );
     state.computeReady = ready;
   }
   return out;
