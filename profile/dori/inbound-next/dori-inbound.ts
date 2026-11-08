@@ -37,6 +37,10 @@ const FAKE_EVENTS = process.env.DORI_INBOUND_FAKE_EVENTS,
 const HERDR: string[] = process.env.DORI_HERDR?.startsWith("[")
   ? JSON.parse(process.env.DORI_HERDR)
   : [process.env.DORI_HERDR ?? "herdr"];
+// DORI_HC: the same seam for the hc (herdr-core) binary.
+const HC: string[] = process.env.DORI_HC?.startsWith("[")
+  ? JSON.parse(process.env.DORI_HC)
+  : [process.env.DORI_HC ?? "hc"];
 const CONFIG = process.env.DORI_CONFIG ?? `${HOME}/.dori/config.json`;
 const STATE_DIR = process.env.DORI_INBOUND_STATE_DIR ?? `${HOME}/.dori/state`;
 const CURSOR_FILE = `${STATE_DIR}/inbound-cursor.json`,
@@ -331,6 +335,23 @@ const saveCursor = (channel: string, ts: string) => {
     console.log(`INBOUND_ERROR cursor ${errMessage(err)}`);
   }
 };
+// The lead's runtime, as dori picks it for the Windows profile: DORI_RUNTIME, else config.json "runtime", else herdr. A
+// pane written as hc:t1 is an hc terminal whatever is set.
+const leadRuntime = async (pane: string): Promise<string> =>
+  pane.startsWith("hc:")
+    ? "hc"
+    : (process.env.DORI_RUNTIME ??
+      (
+        await Bun.file(CONFIG)
+          .json()
+          .catch(() => ({}))
+      ).runtime ??
+      "herdr");
+// herdr pane run types the line and Enter; hc send pastes it and presses Enter in one step.
+const typeArgv = async (pane: string, line: string): Promise<string[]> =>
+  (await leadRuntime(pane)) === "hc"
+    ? [...HC, "--json", "send", pane.replace(/^hc:/, ""), "--", line]
+    : [...HERDR, "pane", "run", pane, line];
 const MAX_LINE = 30_000,
   RETRY_WAITS = [1000, 3000, 9000];
 // Type the line into the lead pane; up to 3 retries (1 s, 3 s, 9 s), re-resolving the pane each attempt.
@@ -354,7 +375,7 @@ const inject = async (payload: InjectPayload): Promise<boolean> => {
       continue;
     }
     try {
-      const p = Bun.spawn([...HERDR, "pane", "run", pane, line], { stdout: "ignore", stderr: "pipe" });
+      const p = Bun.spawn(await typeArgv(pane, line), { stdout: "ignore", stderr: "pipe" });
       const code = await p.exited;
       if (code === 0) {
         console.log(`INJECTED ${payload.channel}:${payload.ts}`);

@@ -4,8 +4,10 @@
 # The messenger is DORI_MESSENGER, else the first of slack.env, telegram.env, discord.env in ~/.dori that holds a token.
 # Skips everything if an omo session already runs.
 # The Dori's name comes from DORI_NAME, else "name" in config.json, else "Dori".
-# -Herdr and -NoLaunch are test seams: a fake herdr, and no omo check / Windows Terminal / agent start.
-param([string]$Herdr = 'herdr', [switch]$NoLaunch)
+# The runtime is DORI_RUNTIME, else "runtime" in config.json, else herdr. With hc (herdr-core) the lead is an hc terminal
+# labelled dori.group=<name> and dori.role=lead, shown with hc attach in Windows Terminal; leadPane is its address.
+# -Herdr, -Hc and -NoLaunch are test seams: a fake herdr or hc, and no omo check / Windows Terminal / agent start.
+param([string]$Herdr = 'herdr', [string]$Hc = 'hc', [switch]$NoLaunch)
 $ErrorActionPreference = 'Continue'
 $doriHome = if ($env:DORI_HOME) { $env:DORI_HOME } else { Join-Path $env:USERPROFILE '.dori' }
 $stateDir = Join-Path $doriHome 'state'
@@ -22,26 +24,42 @@ $name = if ($env:DORI_NAME) { $env:DORI_NAME } elseif ($config.name) { [string]$
 $label = ($name.ToLowerInvariant() -replace '[^\w-]+', '-').Trim('-')
 if (-not $label) { $label = 'dori' }
 
+$runtime = if ($env:DORI_RUNTIME) { $env:DORI_RUNTIME } elseif ($config.runtime) { [string]$config.runtime } else { 'herdr' }
+if ($runtime -eq 'hc') {
+    # The core starts on the first call; the lead runs the user's shell (hc's default: PowerShell 7, else 5.1).
+    & $Hc --json server status *> $null
+    $created = & $Hc --json run --bg --no-parent --no-notify --cwd $env:USERPROFILE --name $label --label "dori.group=$label" --label 'dori.role=lead' | Out-String
+    if (-not ($created -match '"address":"(t\d+)"')) {
+        # The name is taken by a live terminal (an earlier boot): an unnamed terminal, still labelled.
+        $created = & $Hc --json run --bg --no-parent --no-notify --cwd $env:USERPROFILE --label "dori.group=$label" --label 'dori.role=lead' | Out-String
+    }
+    $pane = ([regex]::Match($created, '"address":"(t\d+)"')).Groups[1].Value
+    $workspace = $label
+    if (-not $pane) { Log "hc run failed: $created"; exit 1 }
+    if (-not $NoLaunch) { Start-Process wt.exe -ArgumentList 'hc', 'attach', $pane; Log "hc attach $pane opened in Windows Terminal" }
+}
 # herdr: a visible client in Windows Terminal (it starts the server).
-if (-not $NoLaunch -and -not (Get-Process -Name herdr -ErrorAction SilentlyContinue)) {
+if ($runtime -ne 'hc' -and -not $NoLaunch -and -not (Get-Process -Name herdr -ErrorAction SilentlyContinue)) {
     Start-Process wt.exe -ArgumentList 'herdr'
     Log 'herdr client opened in Windows Terminal'
 }
-$ready = $false
-for ($i = 0; $i -lt 60; $i++) {
-    & $Herdr workspace list *> $null
-    if ($LASTEXITCODE -eq 0) { $ready = $true; break }
-    Start-Sleep -Seconds 2
+if ($runtime -ne 'hc') {
+    $ready = $false
+    for ($i = 0; $i -lt 60; $i++) {
+        & $Herdr workspace list *> $null
+        if ($LASTEXITCODE -eq 0) { $ready = $true; break }
+        Start-Sleep -Seconds 2
+    }
+    if (-not $ready) { Log 'herdr server not reachable after 120 s; giving up'; exit 1 }
+
+    $created = & $Herdr workspace create --label $label --cwd $env:USERPROFILE --no-focus | Out-String
+    $pane = ([regex]::Match($created, '"pane_id":"([^"]+)"')).Groups[1].Value
+    $workspace = ([regex]::Match($created, '"workspace_id":"([^"]+)"')).Groups[1].Value
+    if (-not $workspace -and $pane -match '^([^:]+):') { $workspace = $Matches[1] }
+    if (-not $pane) { Log "workspace create failed: $created"; exit 1 }
 }
-if (-not $ready) { Log 'herdr server not reachable after 120 s; giving up'; exit 1 }
 
-$created = & $Herdr workspace create --label $label --cwd $env:USERPROFILE --no-focus | Out-String
-$pane = ([regex]::Match($created, '"pane_id":"([^"]+)"')).Groups[1].Value
-$workspace = ([regex]::Match($created, '"workspace_id":"([^"]+)"')).Groups[1].Value
-if (-not $workspace -and $pane -match '^([^:]+):') { $workspace = $Matches[1] }
-if (-not $pane) { Log "workspace create failed: $created"; exit 1 }
-
-# This PC's herdr ids: the new pane is the lead, lanes open as tabs in its workspace.
+# This PC's session ids: the new session is the lead; lanes open in its workspace (herdr) or group label (hc).
 foreach ($kv in @(@('leadPane', $pane), @('laneWorkspace', $workspace), @('workspaces', @($workspace)), @('ignorePanes', @($pane)))) {
     $config | Add-Member -NotePropertyName $kv[0] -NotePropertyValue $kv[1] -Force
 }
@@ -92,13 +110,24 @@ switch ($messenger) {
 $prompt = "$name mode. This session was started automatically after the PC rebooted. Start fresh, do not resume. " +
   'First read memory reference/dori/handoff.md, reference/dori/identity.md, reference/dori/operating-rules.md (skip any that do not exist). ' +
   "Then arm every persistent monitor in the handoff table; if there is no handoff note, arm the inbound monitor for $messenger, $inbound, and the monitors in the dori-mode skill setup. " +
-  "The boot script already wrote this PC's herdr ids into ~/.dori/config.json (leadPane $pane, laneWorkspace $workspace); check them with herdr pane current. " +
+  $(if ($runtime -eq 'hc') { "The boot script already wrote this PC's hc ids into ~/.dori/config.json (leadPane $pane, laneWorkspace $workspace, runtime hc); check them with hc get $pane. " } else { "The boot script already wrote this PC's herdr ids into ~/.dori/config.json (leadPane $pane, laneWorkspace $workspace); check them with herdr pane current. " }) +
   'Then ' + $post +
   'After that, wait for messages.'
-if ($NoLaunch) { Log 'NoLaunch: agent not started'; Write-Output "BOOT_OK pane=$pane workspace=$workspace name=$name messenger=$messenger"; exit 0 }
+if ($NoLaunch) { Log 'NoLaunch: agent not started'; Write-Output "BOOT_OK pane=$pane workspace=$workspace name=$name messenger=$messenger runtime=$runtime"; exit 0 }
 Start-Sleep -Seconds 3
 $argv = foreach ($part in $agentCommand) { "'" + $part.Replace('{model}', $model).Replace('{prompt}', $prompt).Replace("'", "''") + "'" }
 $line = '& ' + ($argv -join ' ')
-& $Herdr pane run $pane $line *> $null
-Log "$name session started in pane $pane"
+if ($runtime -eq 'hc') {
+    # A PowerShell still loading its profile drops what is typed: wait (20 s at most) for its PS ...> prompt.
+    for ($i = 0; $i -lt 40; $i++) {
+        $screen = & $Hc --json read $pane --lines 0 | Out-String
+        if ($screen -match 'PS [^\r\n]*>\s*"') { break }
+        Start-Sleep -Milliseconds 500
+    }
+    # '--' quoted: Windows PowerShell 5.1 drops a bare -- before a native command's arguments.
+    & $Hc --json send $pane '--' $line *> $null
+} else {
+    & $Herdr pane run $pane $line *> $null
+}
+Log "$name session started in $runtime session $pane"
 exit 0

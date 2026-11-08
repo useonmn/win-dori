@@ -153,6 +153,35 @@ test("boot writes this PC's herdr ids into config.json and keeps the other setti
   expect(existsSync(join(dori, "state", "boot.log"))).toBe(true);
 });
 
+test("with runtime hc, boot opens a labelled hc terminal and writes its address and the group into config.json", async () => {
+  const c = join(dori, "config.json");
+  writeFileSync(
+    c,
+    JSON.stringify({ ...JSON.parse(readFileSync(join(PROFILE, "dori", "config.json"), "utf8")), runtime: "hc" }),
+  );
+  const hc = join(root, "fake-hc.cmd");
+  const log = join(root, "fake-hc.log");
+  writeFileSync(
+    hc,
+    `@echo off\r\necho %* >> "${log}"\r\nif "%2"=="run" echo {"address":"t3","state":"live"}\r\nexit /b 0\r\n`,
+  );
+  const r = await ps(["-File", BOOT, "-Hc", hc, "-Herdr", join(root, "no-herdr.cmd"), "-NoLaunch"]);
+  expect(r.out).toContain("BOOT_OK pane=t3 workspace=dori name=Dori");
+  expect(r.out).toContain("runtime=hc");
+  const cfg = JSON.parse(readFileSync(c, "utf8"));
+  expect([cfg.leadPane, cfg.laneWorkspace, cfg.workspaces, cfg.ignorePanes, cfg.runtime]).toEqual([
+    "t3",
+    "dori",
+    ["dori"],
+    ["t3"],
+    "hc",
+  ]);
+  const calls = readFileSync(log, "utf8");
+  expect(calls).toContain("--json run --bg --no-parent --no-notify");
+  expect(calls).toContain("dori.group=dori");
+  expect(calls).toContain("dori.role=lead");
+});
+
 test("secrets never reach user environment variables: the script has no SetEnvironmentVariable and HKCU holds no test value", async () => {
   expect(readFileSync(SCRIPT, "utf8")).not.toMatch(/SetEnvironmentVariable/i);
   const r = await install("-Force");

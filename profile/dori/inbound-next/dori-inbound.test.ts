@@ -18,7 +18,8 @@ beforeAll(async () => {
   writeFileSync(
     src,
     `import { appendFileSync, existsSync, readFileSync, writeFileSync } from "node:fs";
-const args = process.argv.slice(process.argv.indexOf("pane"));
+const at = process.argv.indexOf("pane");
+const args = at >= 0 ? process.argv.slice(at) : process.argv.slice(2);
 const f = process.env.FAKE_HERDR_FAILS;
 let fail = false;
 if (f && existsSync(f)) { const n = parseInt(readFileSync(f, "utf8"), 10); if (n > 0) { fail = true; writeFileSync(f, String(n - 1)); } }
@@ -158,6 +159,25 @@ const stop = async (r: Run) => {
 setDefaultTimeout(20_000);
 
 describe("dori-inbound", () => {
+  test("with runtime hc, or a lead written hc:t5, the line goes in with hc send (paste and Enter in one step)", async () => {
+    const r = start({
+      pane: "t4",
+      events: [msg("CHC", "1050.000001", "via hc")],
+      env: { DORI_RUNTIME: "hc", DORI_HC: herdrExe },
+    });
+    await r.waitFor(/^INJECTED CHC:1050.000001$/);
+    const [call] = r.herdrCalls();
+    expect(call.argv.slice(0, 4)).toEqual(["--json", "send", "t4", "--"]);
+    expect(JSON.parse(call.argv[4].slice("[SLACK] ".length)).text).toBe("via hc");
+    const prefixed = start({
+      pane: "hc:t5",
+      events: [msg("CHC", "1050.000002", "prefixed")],
+      env: { DORI_HC: herdrExe },
+    });
+    await prefixed.waitFor(/^INJECTED CHC:1050.000002$/);
+    expect(prefixed.herdrCalls()[0]?.argv.slice(0, 3)).toEqual(["--json", "send", "t5"]);
+  });
+
   test("re-reads the lead pane from config between two messages", async () => {
     const gate = join(root, "gate-pane");
     const r = start({
