@@ -27,6 +27,8 @@ export function omoScreenIdle(screen: string): boolean {
   return lines.length - 1 - (input + 1) <= FOOTER_MAX_LINES;
 }
 
+const noAgent = (status: AgentStatus): boolean => status === "shell" || status === "gone";
+
 export type PaneAgent = { status: AgentStatus; agent?: string; title?: string; cwd?: string };
 
 const text = (value: unknown): string | undefined => (typeof value === "string" && value !== "" ? value : undefined);
@@ -62,6 +64,21 @@ export type Front = {
   readonly processes?: readonly ForegroundProcess[];
 };
 
+/**
+ * Windows (herdr 0.9.5) has no foreground process groups: `process-info` lists only the pane's own shell (pid ===
+ * shell_pid) even while an agent runs inside it, so the list says nothing about the agent. There the agent status
+ * decides instead: no agent (`shell`, `gone`) is a shell in front, any agent is not.
+ */
+export const onlyPaneShell = (info: { foreground_processes?: unknown; shell_pid?: unknown } | undefined): boolean => {
+  const procs = info?.foreground_processes;
+  return (
+    typeof info?.shell_pid === "number" &&
+    Array.isArray(procs) &&
+    procs.length > 0 &&
+    procs.every((p) => (p as { pid?: unknown } | undefined)?.pid === info.shell_pid)
+  );
+};
+
 const toProcess = (value: unknown): ForegroundProcess => {
   const p = (value ?? {}) as { name?: unknown; argv?: unknown; pid?: unknown };
   const argv = Array.isArray(p.argv) ? p.argv.map(String) : [];
@@ -73,7 +90,12 @@ const toProcess = (value: unknown): ForegroundProcess => {
  * process group. A failed or unreadable lookup is doubt (a shell in front) and is one stderr line ending in `onFail`:
  * what the caller does about it ("holding delivery" from deliver, "status read as doubt" from a plain probe).
  */
-export async function foreground(cli: HerdrCli, paneId: string, onFail: string = AS_DOUBT): Promise<Front> {
+export async function foreground(
+  cli: HerdrCli,
+  paneId: string,
+  onFail: string = AS_DOUBT,
+  status?: AgentStatus,
+): Promise<Front> {
   try {
     const info = (await cli.call(["pane", "process-info", "--pane", paneId]))["process_info"] as
       | { foreground_process_group_id?: unknown; foreground_processes?: unknown; shell_pid?: unknown }
@@ -82,8 +104,12 @@ export async function foreground(cli: HerdrCli, paneId: string, onFail: string =
     const rootPid = info?.shell_pid;
     const procs = info?.foreground_processes;
     const processes = Array.isArray(procs) ? procs.map(toProcess) : undefined;
+    const shell =
+      cli.windows && onlyPaneShell(info)
+        ? noAgent(status ?? (await paneAgent(cli, paneId)).status)
+        : interactiveShellInFront(processes);
     return {
-      shell: interactiveShellInFront(processes),
+      shell,
       ...(typeof pgid === "number" ? { pgid } : {}),
       ...(typeof rootPid === "number" ? { rootPid } : {}),
       ...(processes ? { processes } : {}),
@@ -113,7 +139,7 @@ export async function probe(cli: HerdrCli, paneId: string, screenCheck = true, o
   if (status === "gone") return { status, shellInFront: true };
   const seen: AgentStatus =
     screenCheck && status === "working" && (await screenShowsIdle(cli, paneId)) ? "idle" : status;
-  const front = await foreground(cli, paneId, onFail);
+  const front = await foreground(cli, paneId, onFail, status);
   return {
     status: seen,
     ...(agent !== undefined ? { agent } : {}),

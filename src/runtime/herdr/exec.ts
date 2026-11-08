@@ -11,6 +11,8 @@ export class HerdrCli {
   constructor(
     private readonly exec: Exec = spawnExec,
     private readonly session: string | undefined = process.env["DORI_HERDR_SESSION"],
+    /** Windows (herdr 0.9.5 there): see onlyPaneShell, waitForPrompt and typeIntoShell. */
+    readonly windows: boolean = process.platform === "win32",
   ) {}
 
   async call(argv: readonly string[]): Promise<Record<string, unknown>> {

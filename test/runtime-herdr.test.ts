@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { type ExecResult, ToolError } from "../src/runtime/exec.ts";
 import { HerdrError, HerdrRuntime } from "../src/runtime/herdr/index.ts";
 import { type CreateSpec, openSession } from "../src/runtime/types.ts";
-import { fail, ok, omoFront, recorder, ref, world } from "./herdr-recorder.ts";
+import { fail, ok, omoFront, POSIX, recorder, ref, world } from "./herdr-recorder.ts";
 
 const pane = { pane_id: "w1:p2", tab_id: "w1:t2", workspace_id: "w1" };
 const spec = (over: Partial<CreateSpec> = {}): CreateSpec => ({
@@ -42,7 +42,7 @@ describe("herdr argv", () => {
             : { root_pane: pane },
       ),
     );
-    const h = new HerdrRuntime(r.exec, "");
+    const h = new HerdrRuntime(r.exec, "", POSIX);
     expect(await h.createGroup("dori", "/w")).toBe("w1");
     expect(await h.create(spec())).toEqual(ref("w1:p2", "w1", "w1:t2"));
     await h.create(spec({ name: "solo", env: { A: "1" } }));
@@ -105,7 +105,7 @@ describe("herdr argv", () => {
 
   test("openSession creates then starts: workspace create, then pane run in its root pane", async () => {
     const r = recorder(() => ok({ root_pane: pane }));
-    expect(await openSession(new HerdrRuntime(r.exec, ""), spec(), "omo")).toEqual(ref("w1:p2", "w1", "w1:t2"));
+    expect(await openSession(new HerdrRuntime(r.exec, "", POSIX), spec(), "omo")).toEqual(ref("w1:p2", "w1", "w1:t2"));
     expect(r.calls).toEqual([
       ["workspace", "create", "--label", "dori", "--cwd", "/w", "--no-focus"],
       ["pane", "run", "w1:p2", "omo"],
@@ -114,7 +114,7 @@ describe("herdr argv", () => {
 
   test("openSession: a failed pane run closes the pane workspace create made, then rethrows", async () => {
     const r = recorder((argv) => (argv[1] === "run" ? fail("run failed") : ok({ root_pane: pane })));
-    await expect(openSession(new HerdrRuntime(r.exec, ""), spec(), "omo")).rejects.toThrow("run failed");
+    await expect(openSession(new HerdrRuntime(r.exec, "", POSIX), spec(), "omo")).rejects.toThrow("run failed");
     expect(r.calls).toEqual([
       ["workspace", "create", "--label", "dori", "--cwd", "/w", "--no-focus"],
       ["pane", "run", "w1:p2", "omo"],

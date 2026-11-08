@@ -22,6 +22,8 @@ export const ref = (id: string, group?: string, container?: string): SessionRef 
   ...(group !== undefined ? { group } : {}),
   ...(container !== undefined ? { container } : {}),
 });
+/** The adapter as on macOS and Linux, for tests that pin herdr argv: Windows adds a prompt wait before each start. */
+export const POSIX = { windows: false } as const;
 export const omoFront = { process_info: { foreground_processes: [{ name: "omo", argv: ["omo"] }] } };
 // The World recorder from test/fake.ts, with the paste settle recorded instead of slept.
 export function world() {

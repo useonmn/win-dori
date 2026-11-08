@@ -32,17 +32,17 @@ const isPowerShell = (shell: string): boolean => shell === "pwsh" || shell === "
 // A shell runs a command (not a prompt) only with an explicit command flag: -c, also inside combined short flags such
 // as -lc, or PowerShell's -Command/-File/-EncodedCommand (whole words only: its other long flags contain a 'c'). Any
 // other operand (a script path, --rcfile FILE, -o OPT) stays held.
-// cmd.exe runs a command with /c and keeps its prompt with /k.
+// cmd.exe runs a command with /c and keeps its prompt with /k; PowerShell also takes its flags with a leading /.
 const runsCommand = (shell: string, arg: string): boolean =>
   shell === "cmd"
     ? /^\/c$/i.test(arg)
     : isPowerShell(shell)
-      ? /^-(c|command|f|file|e|ec|encodedcommand)$/i.test(arg)
+      ? /^[-/](c|command|f|file|e|ec|encodedcommand)$/i.test(arg)
       : /^-[A-Za-z]*c[A-Za-z]*$/.test(arg);
 // PowerShell's -NoExit (any prefix it accepts: -noe, -noex, -noexi, -noexit, one or two dashes) keeps an interactive
 // prompt after the command runs, so that shell is held.
 const keepsPrompt = (shell: string, arg: string): boolean =>
-  (isPowerShell(shell) && /^--?noe(x(i(t)?)?)?$/i.test(arg)) || (shell === "cmd" && /^\/k$/i.test(arg));
+  (isPowerShell(shell) && /^(--?|\/)noe(x(i(t)?)?)?$/i.test(arg)) || (shell === "cmd" && /^\/k$/i.test(arg));
 
 /**
  * True when the foreground processes show an interactive shell, or cannot be read (`undefined` or empty is doubt).

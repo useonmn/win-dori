@@ -12,11 +12,11 @@ export type Sleep = (ms: number) => Promise<void>;
 const NO_AGENT: DeliverOutcome = { kind: "no-agent" };
 /** How a failed lookup ends its stderr line on the delivery path: the message stays queued. */
 const HOLDING = "holding delivery";
-const ambiguous = (step: string, failure: unknown): DeliverOutcome => ({
-  kind: "ambiguous",
-  detail: `herdr ${step} failed: ${reasonOf(failure)}`,
-  failure,
-});
+/** A call spawnExec refused to run (an unsafe .cmd shim on Windows) never reached herdr: a plain failure, thrown. */
+const ambiguous = (step: string, failure: unknown): DeliverOutcome => {
+  if (failure instanceof ToolError && failure.result.refused) throw failure;
+  return { kind: "ambiguous", detail: `herdr ${step} failed: ${reasonOf(failure)}`, failure };
+};
 const identity = (agent: string | undefined, pgid: number | undefined): AgentIdentity => ({
   ...(agent !== undefined ? { agent } : {}),
   ...(pgid !== undefined ? { pgid } : {}),
@@ -55,7 +55,7 @@ export async function deliver(cli: HerdrCli, paneId: string, text: string, sleep
     // Re-read right before typing (#66): only a pane that still has an agent gets keystrokes.
     const { status, agent } = await paneAgent(cli, paneId);
     if (status === "shell" || status === "gone") return NO_AGENT;
-    const front = await foreground(cli, paneId, HOLDING);
+    const front = await foreground(cli, paneId, HOLDING, status);
     if (front.shell) return NO_AGENT;
     // A multi-line paste swallows the Enter that follows it, so type the message as one line.
     // A failed send-text may still have typed some or all of it: ambiguous as well.
@@ -84,8 +84,10 @@ export async function submitTyped(cli: HerdrCli, paneId: string, typedInto: Agen
   if (status === "gone") return "wait";
   if (status === "shell") return "changed";
   // submitTyped holds the Enter of an earlier delivery, so a failed lookup is reported as holding that delivery.
-  const front = await foreground(cli, paneId, HOLDING);
+  const front = await foreground(cli, paneId, HOLDING, status);
   if (front.shell) return "wait";
+  // On Windows the pgid herdr reports is the pane shell's pid, the same before and after an agent restart, so the
+  // pgid check below never fires there and the agent name alone tells agents apart.
   if (typedInto.agent !== undefined && agent !== typedInto.agent) return "changed";
   if (typedInto.pgid !== undefined && front.pgid !== typedInto.pgid) return "changed";
   const missed = await pressEnter(cli, paneId);
@@ -111,8 +113,12 @@ async function pressEnter(cli: HerdrCli, paneId: string): Promise<{ readonly fai
  */
 export async function typeIntoShell(cli: HerdrCli, paneId: string, text: string): Promise<boolean> {
   if ((await paneAgent(cli, paneId)).status !== "shell") return false;
-  await cli.call(["pane", "send-text", paneId, text]);
-  await cli.call(["pane", "send-keys", paneId, "enter"]);
+  // A Windows console does not read LF as Enter (cmd drops it, PSReadLine stacks the lines up), so there each
+  // non-empty line gets its own Enter, which is what a POSIX shell does with the LF.
+  for (const line of cli.windows ? text.split(/\r?\n/).filter(Boolean) : [text]) {
+    await cli.call(["pane", "send-text", paneId, line]);
+    await cli.call(["pane", "send-keys", paneId, "enter"]);
+  }
   return true;
 }
 

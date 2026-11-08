@@ -1,11 +1,27 @@
 // One injectable process runner shared by every runtime adapter, so tests replace the runtime binary with a recorder
 // and end-to-end tests point it at an isolated session.
 
-export type ExecResult = { readonly code: number; readonly stdout: string; readonly stderr: string };
+import { resolveCommand } from "../run.ts";
+
+/** `refused`: spawnExec would not run the argv (resolveCommand refused it for a .cmd shim): nothing was sent. */
+export type ExecResult = {
+  readonly code: number;
+  readonly stdout: string;
+  readonly stderr: string;
+  readonly refused?: true;
+};
 export type Exec = (cmd: string, argv: readonly string[]) => Promise<ExecResult>;
 
 export const spawnExec: Exec = async (cmd, argv) => {
-  const proc = Bun.spawn([cmd, ...argv], { stdout: "pipe", stderr: "pipe", stdin: "ignore" });
+  // On Windows an npm .cmd shim is run through node or a safely quoted cmd.exe line (see run.ts), or refused.
+  const resolved = resolveCommand([cmd, ...argv]);
+  if ("refused" in resolved) return { code: 126, stdout: "", stderr: resolved.refused, refused: true };
+  const proc = Bun.spawn([...resolved.argv], {
+    stdout: "pipe",
+    stderr: "pipe",
+    stdin: "ignore",
+    ...(resolved.verbatim ? { windowsVerbatimArguments: true } : {}),
+  });
   const [stdout, stderr, code] = await Promise.all([
     new Response(proc.stdout).text(),
     new Response(proc.stderr).text(),

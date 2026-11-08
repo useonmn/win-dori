@@ -1,5 +1,5 @@
 import type { CloseScope, CreateSpec, SessionInfo, SessionRef } from "../types.ts";
-import type { HerdrCli } from "./exec.ts";
+import { type HerdrCli, ToolError } from "./exec.ts";
 import { paneStatus } from "./probe.ts";
 
 export type Env = Readonly<Record<string, string | undefined>>;
@@ -77,8 +77,32 @@ export async function create(cli: HerdrCli, spec: CreateSpec): Promise<SessionRe
   }
 }
 
+const PROMPT_WAIT_MS = 10_000;
+
+/**
+ * Every start goes into a pane just created, and a Windows shell that is still starting can drop what is typed (Git
+ * Bash does), so on Windows it waits for a prompt first. A prompt of unknown shape only costs the wait.
+ */
+export async function waitForPrompt(cli: HerdrCli, paneId: string): Promise<void> {
+  if (!cli.windows) return;
+  try {
+    await cli.call([
+      "pane",
+      "wait-output",
+      paneId,
+      "--regex",
+      String.raw`[>$#%\u{276F}]\s*\z`,
+      "--timeout",
+      String(PROMPT_WAIT_MS),
+    ]);
+  } catch (e) {
+    if (!(e instanceof ToolError)) throw e;
+  }
+}
+
 /** Starts the command line in the pane's shell. */
 export async function start(cli: HerdrCli, paneId: string, command: string): Promise<void> {
+  await waitForPrompt(cli, paneId);
   await cli.call(["pane", "run", paneId, command]);
 }
 

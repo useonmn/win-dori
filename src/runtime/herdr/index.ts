@@ -21,7 +21,7 @@ export type { Sleep } from "./deliver.ts";
 export { HerdrError } from "./exec.ts";
 export { omoScreenIdle } from "./probe.ts";
 
-export type HerdrOptions = { readonly env?: Env; readonly sleep?: Sleep };
+export type HerdrOptions = { readonly env?: Env; readonly sleep?: Sleep; readonly windows?: boolean };
 
 /** herdr behind the session runtime interface: a session is a pane, its group the pane's workspace. */
 export class HerdrRuntime implements SessionRuntime {
@@ -35,7 +35,7 @@ export class HerdrRuntime implements SessionRuntime {
     session: string | undefined = process.env["DORI_HERDR_SESSION"],
     options: HerdrOptions = {},
   ) {
-    this.cli = new HerdrCli(exec, session);
+    this.cli = new HerdrCli(exec, session, options.windows);
     this.env = options.env ?? process.env;
     this.sleep = options.sleep ?? ((ms) => Bun.sleep(ms));
   }
