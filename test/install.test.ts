@@ -142,7 +142,7 @@ t("DORI_NO_PULL=true and DORI_NO_PULL=yes skip the pull like DORI_NO_PULL=1; DOR
   // And with 0 it pulls as usual.
   expect(install({ DORI_NO_PULL: "0" }).code).toBe(0);
   expect(git(src, "rev-parse", "HEAD")).toBe(git(upstream, "rev-parse", "HEAD"));
-});
+}, 30_000); // four install.sh runs under Git Bash: 4.2 s alone on Windows, over the 5 s default under load
 
 t("a branch with no upstream is not taken for local work: git's reason, no reset suggested", () => {
   // Given a checkout with a local edit whose branch tracks nothing.
