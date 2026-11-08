@@ -4,7 +4,7 @@
   "private": true,
   "description": "dori superagent harness (ports to windori on Windows, macOS and Linux)",
   "type": "module",
-  "license": "MIT",
+  "license": "SUL-1.0",
   "packageManager": "bun@1.4.4",
   "bin": {
     "dori-harness": "src/cli.ts"
