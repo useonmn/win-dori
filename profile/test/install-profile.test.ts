@@ -182,6 +182,92 @@ test("with runtime hc, boot opens a labelled hc terminal and writes its address 
   expect(calls).toContain("dori.role=lead");
 });
 
+// A fake hc for the boot: `ls` prints LS, `get` prints GET, `run` prints a new terminal t4; every call is logged.
+const fakeHc = (tag: string, ls: string, get: string) => {
+  const hc = join(root, `fake-hc-${tag}.cmd`);
+  const log = join(root, `fake-hc-${tag}.log`);
+  writeFileSync(
+    hc,
+    `@echo off\r\necho %* >> "${log}"\r\nif "%2"=="ls" echo ${ls}\r\nif "%2"=="get" echo ${get}\r\nif "%2"=="run" echo {"address":"t4","state":"live"}\r\nexit /b 0\r\n`,
+  );
+  return { hc, calls: () => (existsSync(log) ? readFileSync(log, "utf8") : "") };
+};
+const secondDori = (cfg: Record<string, unknown>) => {
+  const other = join(root, "Other Dori", ".dori");
+  mkdirSync(other, { recursive: true });
+  writeFileSync(join(other, "config.json"), JSON.stringify(cfg));
+  writeFileSync(join(other, "slack.env"), "DORI_SLACK_TOKEN=xoxb-test-only\n");
+  return other;
+};
+
+test("a second Dori (DORI_HOME) on hc gets its own kept terminal, label, cwd, boot command and prompt, and its folder in the env", async () => {
+  const cwd = join(root, "blog");
+  mkdirSync(cwd, { recursive: true });
+  const other = secondDori({
+    name: "\ub3c4\uc6b0\ubbf8",
+    label: "helper",
+    runtime: "hc",
+    bootCwd: cwd,
+    bootPrompt: "Read START.md and do what it says.",
+    bootCommand: ["omo", "--model", "{model}", "--name", "helper", "{prompt}"],
+    defaultModel: "m1",
+  });
+  const { hc, calls } = fakeHc("second", '{"terminals":[]}', "{}");
+  const r = await ps(["-File", BOOT, "-Hc", hc, "-Herdr", join(root, "no-herdr.cmd"), "-NoLaunch"], {
+    DORI_HOME: other,
+  });
+  expect(r.out).toContain(
+    "BOOT_OK pane=t4 workspace=helper name=\ub3c4\uc6b0\ubbf8 messenger=slack runtime=hc reuse=False",
+  );
+  const line = r.out.split(/\r?\n/).find((l) => l.startsWith("BOOT_LINE ")) ?? "";
+  expect(line).toBe(
+    `BOOT_LINE $env:DORI_HOME='${other}'; $env:DORI_CONFIG='${join(other, "config.json")}'; $env:DORI_STATE_DIR='${join(other, "state")}'; $env:DORI_ENV_FILE='${join(other, "slack.env")}'; & 'omo' '--model' 'm1' '--name' 'helper' 'Read START.md and do what it says.'`,
+  );
+  expect(calls()).toContain(
+    `--json run --bg --no-parent --no-notify --keep --cwd ${cwd} --name helper --label dori.group=helper --label dori.role=lead`,
+  );
+  const cfg = JSON.parse(readFileSync(join(other, "config.json"), "utf8"));
+  expect([cfg.leadPane, cfg.laneWorkspace]).toEqual(["t4", "helper"]);
+  // The first Dori's folder is untouched.
+  expect(JSON.parse(readFileSync(join(dori, "config.json"), "utf8")).leadPane).not.toBe("t4");
+});
+
+test("with hc, a live lead terminal of this Dori with no agent below its shell is reused, not doubled", async () => {
+  const other = secondDori({ name: "helper", runtime: "hc" });
+  const { hc, calls } = fakeHc("reuse", '{"terminals":[{"address":"t7","state":"live"}]}', '{"address":"t7","pid":0}');
+  const r = await ps(["-File", BOOT, "-Hc", hc, "-Herdr", join(root, "no-herdr.cmd"), "-NoLaunch"], {
+    DORI_HOME: other,
+  });
+  expect(r.out).toContain("BOOT_OK pane=t7 workspace=helper");
+  expect(r.out).toContain("reuse=True");
+  expect(calls()).toContain("--json ls --label dori.group=helper --label dori.role=lead");
+  expect(calls()).not.toContain(" run ");
+});
+
+test("with hc, boot leaves this Dori alone when its agent already runs below the lead terminal's shell", async () => {
+  // The lead's shell is this test process; the agent is a powershell child of it.
+  const agent = Bun.spawn(["powershell", "-NoProfile", "-Command", "Start-Sleep 60"], {
+    stdout: "ignore",
+    stderr: "ignore",
+  });
+  try {
+    const other = secondDori({ name: "helper", runtime: "hc", bootCommand: ["powershell", "{prompt}"] });
+    const { hc, calls } = fakeHc(
+      "running",
+      '{"terminals":[{"address":"t7","state":"live"}]}',
+      `{"pid":${process.pid}}`,
+    );
+    const r = await ps(["-File", BOOT, "-Hc", hc, "-Herdr", join(root, "no-herdr.cmd"), "-NoLaunch"], {
+      DORI_HOME: other,
+    });
+    expect(r.out).toContain("BOOT_RUNNING pane=t7");
+    expect(r.out).not.toContain("BOOT_OK");
+    expect(calls()).not.toContain(" run ");
+  } finally {
+    agent.kill();
+  }
+});
+
 test("secrets never reach user environment variables: the script has no SetEnvironmentVariable and HKCU holds no test value", async () => {
   expect(readFileSync(SCRIPT, "utf8")).not.toMatch(/SetEnvironmentVariable/i);
   const r = await install("-Force");
