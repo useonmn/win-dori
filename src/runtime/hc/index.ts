@@ -73,8 +73,18 @@ export class HcRuntime implements SessionRuntime {
     await start(this.exec, ref.id, command);
   }
 
-  list(filter?: { readonly group?: string }): Promise<readonly SessionInfo[]> {
-    return list(this.exec, filter?.group);
+  /**
+   * Windows: hc lists the last OSC 7501 word even after the program exited (herdr-core #70), so a terminal that reported
+   * one is re-read through probe, where the process below the shell decides (an exited lane reads `shell`, not idle).
+   */
+  async list(filter?: { readonly group?: string }): Promise<readonly SessionInfo[]> {
+    const rows = await list(this.exec, filter?.group);
+    if (!this.windows) return rows;
+    return Promise.all(
+      rows.map(async (row) =>
+        row.status === undefined ? row : { ...row, status: (await this.probe(row.ref)).status },
+      ),
+    );
   }
 
   probe(ref: SessionRef): Promise<Probe> {

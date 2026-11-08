@@ -68,6 +68,13 @@ describe("hc on Windows: #70, a terminal whose foreground is its own shell", () 
     expect(exited.fake.calls.some((argv) => argv.includes("send"))).toBe(false);
   });
 
+  test("list believes a listed word only while a program runs below the shell: an exited lane lists as a shell", async () => {
+    const t = () => terminal({ foreground: pwsh, status: { state: "idle", app: "fake" }, reported: true });
+    expect((await rig({ t1: t() }, {}, win(false)).rt.list()).map((s) => s.status)).toEqual(["shell"]);
+    expect((await rig({ t1: t() }, {}, win(true)).rt.list()).map((s) => s.status)).toEqual(["idle"]);
+    expect((await rig({ t1: t() }).rt.list()).map((s) => s.status)).toEqual(["idle"]);
+  });
+
   test("the POSIX adapter reads the same record as a shell in front, as upstream does", () => {
     expect(parseProbe(terminal({ foreground: pwsh, status: { state: "idle" }, reported: true })).shellInFront).toBe(
       true,
