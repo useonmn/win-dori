@@ -29,7 +29,13 @@ export const deadPaneTick = async (
   const skip = new Set([config.leadPane, ...config.ignorePanes].filter(Boolean));
   const marked = (tail: string) => config.deadPanePatterns.some((p) => tail.includes(p.toLowerCase()));
   const lanes = await new Registry(config.stateDir).open();
-  for (const session of await listSessions(rts, { lanes })) {
+  // Each watched group is listed by name: a runtime names a session's group only when asked for it (hc has no workspace,
+  // only the dori.group label), so an unfiltered list would leave every hc session outside the watched groups.
+  const sessions =
+    watch.size > 0
+      ? (await Promise.all([...watch].map((group) => listSessions(rts, { group, lanes })))).flat()
+      : await listSessions(rts, { lanes });
+  for (const session of sessions) {
     const id = session.ref.id;
     if (skip.has(id) || (watch.size > 0 && !watch.has(session.ref.group ?? ""))) continue;
     if (session.status && ALIVE_STATUSES.has(session.status)) {
