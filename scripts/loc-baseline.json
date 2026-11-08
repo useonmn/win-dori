@@ -25,7 +25,7 @@
   "skills/dori-mode/scripts/test/verify-pr.test.ts": 505,
   "skills/dori-mode/scripts/test/worklog.test.ts": 390,
   "src/telemetry.ts": 282,
-  "test/e2e.test.ts": 316,
+  "test/e2e.test.ts": 331,
   "test/telemetry.test.ts": 269,
   "test/windows.test.ts": 622
 }

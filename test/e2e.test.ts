@@ -304,7 +304,22 @@ describe.skipIf(!herdrBin || !IS_WINDOWS).each(windowsShells.filter(([, exe]) =>
         return existsSync(f) && readFileSync(f, "utf8") ? (JSON.parse(readFileSync(f, "utf8")) as string[]) : undefined;
       },
       40_000,
-    );
+    ).catch(async (e: unknown) => {
+      // The lead pane's screen shows what the shell did with the typed line.
+      const lead = String(JSON.parse(readFileSync(join(own, "roles.json"), "utf8"))["lead"] ?? "");
+      const screen = await spawnExec("herdr", [
+        "--session",
+        name,
+        "pane",
+        "read",
+        lead,
+        "--lines",
+        "40",
+        "--source",
+        "recent",
+      ]);
+      throw new Error(`${e instanceof Error ? e.message : String(e)}; lead ${lead} screen:\n${screen.stdout}`);
+    });
     expect(argv[0]).toBe("--append-system-prompt");
     expect(readFileSync(argv[1]!, "utf8")).toContain("You are the ");
     await until(
