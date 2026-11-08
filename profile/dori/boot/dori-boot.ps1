@@ -80,7 +80,12 @@ if ($runtime -eq 'hc') {
     }
     $workspace = $label
     # One Windows Terminal window ("dori") with a tab per Dori.
-    if (-not $NoLaunch) { Start-Process wt.exe -ArgumentList '-w', 'dori', 'nt', '--title', $label, 'hc', 'attach', $pane; Log "hc attach $pane opened in Windows Terminal" }
+    # One viewer per lead: a reboot or rerun never leaves two identical tabs.
+    if (-not $NoLaunch) {
+        $viewer = Get-CimInstance Win32_Process -Filter "Name='hc.exe'" -ErrorAction SilentlyContinue | Where-Object { $_.CommandLine -match "\battach\s+$pane\b" }
+        if ($viewer) { Log "hc attach $pane already open (pid $(@($viewer)[0].ProcessId)); no new tab" }
+        else { Start-Process wt.exe -ArgumentList '-w', 'dori', 'nt', '--title', $label, 'hc', 'attach', $pane; Log "hc attach $pane opened in Windows Terminal" }
+    }
 }
 # herdr: a visible client in Windows Terminal (it starts the server).
 if ($runtime -ne 'hc' -and -not $NoLaunch -and -not (Get-Process -Name herdr -ErrorAction SilentlyContinue)) {
