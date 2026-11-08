@@ -16,7 +16,9 @@ const base =
 const root = mkdtempSync(join(base, "dhc-"));
 const [state, run, config] = [join(root, "s"), join(root, "r"), join(root, "c")];
 const cli = resolve(import.meta.dir, "../src/cli.ts");
-export const fixture = resolve(import.meta.dir, "fixtures/fake-agent-7501.sh");
+export const win = process.platform === "win32";
+// Windows has no sh: the TypeScript twin of the fixture, run by bun (a child of the session's PowerShell).
+export const fixture = resolve(import.meta.dir, win ? "fixtures/fake-agent-7501.ts" : "fixtures/fake-agent-7501.sh");
 
 // The caller's own runtime identity is dropped: inside a terminal of another core, dori would reach that core instead.
 const {
@@ -41,7 +43,7 @@ export const doriEnv = (home: string) => ({
   DORI_HOME: home,
   DORI_RUNTIME: "hc",
   DORI_TELEMETRY: "0",
-  DORI_AGENT_CMD: `sh -c '. "$0"' ${shq(fixture)}`,
+  DORI_AGENT_CMD: win ? `bun ${fixture.replaceAll("\\", "/")}` : `sh -c '. "$0"' ${shq(fixture)}`,
 });
 
 export const newHome = (name: string): string => {

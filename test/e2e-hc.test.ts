@@ -14,6 +14,7 @@ import {
   terminal,
   until,
   waitStatus,
+  win,
 } from "./e2e-hc-setup.ts";
 
 // Real hc (herdr-core), one isolated core, a fixture agent that reports OSC 7501 instead of a model: proves the hc
@@ -70,11 +71,14 @@ test.skipIf(!hcBin)(
     const started = await dori(laneHome, "start", "e2e-k", "--brief", brief, "--cwd", laneHome);
     lane = addressOf(started, "STARTED e2e-k");
     // hc updates `foreground` after the first OSC 7501 report: until it shows the fixture, the login shell is in
-    // front and Dori holds deliveries (#66), so the lane is ready only when both agree.
+    // front and Dori holds deliveries (#66), so the lane is ready only when both agree. On Windows the foreground
+    // never leaves the shell (herdr-core #70): there the report alone is waited for, and Dori reads the fixture from
+    // the process tree below the shell.
     const t = await until("the lane to report idle with the fixture in front", async () => {
       const got = await terminal(lane);
       const fg = (got["foreground"] as { argv?: string[] } | undefined)?.argv ?? [];
-      return got["reported"] === true && statusOf(got) === "idle" && fg.includes(fixture) ? got : undefined;
+      const inFront = win || fg.some((a) => a.replaceAll("\\", "/") === fixture.replaceAll("\\", "/"));
+      return got["reported"] === true && statusOf(got) === "idle" && inFront ? got : undefined;
     });
     expect((t["status"] as Record<string, unknown>)["app"]).toBe("fake");
     expect((t["labels"] as Record<string, string>)["dori.lane"]).toBe("e2e-k");
@@ -98,7 +102,9 @@ test.skipIf(!hcBin)(
   "a terminal that never reports is not an agent: send queues and nothing is typed into it",
   async () => {
     const plain = String(
-      (await hc("run", "--bg", "--no-parent", "--no-notify", "--name", "plain", "--", "sh"))["address"],
+      (await hc("run", "--bg", "--no-parent", "--no-notify", "--name", "plain", "--", win ? "powershell.exe" : "sh"))[
+        "address"
+      ],
     );
     const t = await until("the plain shell in front", async () => {
       const got = await terminal(plain);
