@@ -23,7 +23,7 @@ bun run ci
 - `test` — the harness suite.
 - `test:skill` — the skill's script suite.
 
-Only `herdr`, `bun` and network access to GitHub are needed for the unit suites; on Windows also run `cd profile && bun test` for the Windows profile. `test/e2e.test.ts` starts a real `herdr` server and is skipped when `herdr` is not on `PATH`.
+The unit suites need `bun` and `git`, run offline, and use recorded stand-ins for `herdr` and `gh`; on Windows also run `cd profile && bun test` for the Windows profile. `test/e2e.test.ts` starts a real `herdr` server and is skipped when `herdr` is not on `PATH`; `test/e2e-hc.test.ts` does the same with `hc`.
 
 ## A pull request
 
