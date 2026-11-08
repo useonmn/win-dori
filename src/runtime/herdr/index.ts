@@ -15,7 +15,7 @@ import type {
 import { deliver, keys, type Sleep, submitTyped, typeIntoShell } from "./deliver.ts";
 import { HerdrCli } from "./exec.ts";
 import { probe } from "./probe.ts";
-import { close, create, createGroup, type Env, list, self, start } from "./sessions.ts";
+import { close, create, createGroup, type Env, list, self, start, waitForPrompt } from "./sessions.ts";
 
 export type { Sleep } from "./deliver.ts";
 export { HerdrError } from "./exec.ts";
@@ -50,6 +50,10 @@ export class HerdrRuntime implements SessionRuntime {
 
   create(spec: CreateSpec): Promise<SessionRef> {
     return create(this.cli, spec);
+  }
+
+  ready(ref: SessionRef): Promise<void> {
+    return waitForPrompt(this.cli, ref.id);
   }
 
   start(ref: SessionRef, command: string): Promise<void> {

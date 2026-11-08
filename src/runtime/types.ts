@@ -74,6 +74,8 @@ export interface SessionRuntime {
   submitTyped(ref: SessionRef, into: AgentIdentity): Promise<SubmitResult>;
   typeIntoShell(ref: SessionRef, text: string): Promise<boolean>;
   keys(ref: SessionRef, keys: readonly Key[]): Promise<void>;
+  /** Waits until a session just created takes input (herdr on Windows: its shell's prompt is up); optional. */
+  ready?(ref: SessionRef): Promise<void>;
   /** herdr: "session" = `pane close <id>`; "container" = `tab close <ref.container>` (pane close when the ref has no container). hc: kill then rm for both. Default "session". */
   close(ref: SessionRef, scope?: CloseScope): Promise<void>;
 }

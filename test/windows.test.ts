@@ -20,14 +20,23 @@ import { review } from "../src/gate.ts";
 import type { Deps } from "../src/harness.ts";
 import { load1, windowsLoad } from "../src/host.ts";
 import { ready, startLane } from "../src/lanes.ts";
-import { Herdr, spawnExec, type Exec } from "../src/herdr.ts";
 import { loopTick } from "../src/loop.ts";
 import { acquire, release } from "../src/loop-lock.ts";
 import { batArg, resolveCommand, type CommandSys } from "../src/run.ts";
-import { appendArg, doriCommand, IS_WINDOWS, paneCommand, paneShell, quoteArg, type PaneShell } from "../src/shell.ts";
+import { type Exec, spawnExec } from "../src/runtime/exec.ts";
+import type { SessionRuntime } from "../src/runtime/types.ts";
+import {
+  appendArg,
+  doriCommand,
+  IS_WINDOWS,
+  paneCommand,
+  quoteArg,
+  sessionShell,
+  type PaneShell,
+} from "../src/shell.ts";
 import { Store } from "../src/store.ts";
 import { Telemetry } from "../src/telemetry.ts";
-import { World } from "./fake.ts";
+import { href, World } from "./fake.ts";
 
 const dir = mkdtempSync(join(tmpdir(), "dori-win-"));
 afterAll(() => rmSync(dir, { recursive: true, force: true }));
@@ -42,7 +51,7 @@ function setup(shell: PaneShell = "posix") {
   const w = new World();
   const d: Deps = { ...w.deps(), shell };
   const lead = w.addPane("w1:p1", "idle");
-  d.store.setRole("lead", "w1:p1");
+  d.store.setRole("lead", href("w1:p1"));
   const brief = join(d.store.root, "brief.md");
   writeFileSync(brief, "Do the thing.");
   return { w, d, lead, brief };
@@ -112,22 +121,22 @@ describe("rename over an open file", () => {
     for (const code of ["EPERM", "EACCES", "EBUSY"]) {
       const ops = flaky(3, code);
       const s = new Store(mkdtempSync(join(dir, "store-")), ops);
-      s.setRole("lead", "w1:p1");
-      expect(s.roles().lead).toBe("w1:p1");
+      s.setRole("lead", href("w1:p1"));
+      expect(s.roles().lead).toEqual(href("w1:p1"));
       expect(ops.sleeps).toEqual([10, 20, 40]);
     }
   });
 
   test("off Windows, or for any other error, the failure is immediate; a failed write leaves no temp file", () => {
     const posix = new Store(mkdtempSync(join(dir, "store-")), { ...flaky(1), windows: false });
-    expect(() => posix.setRole("lead", "w1:p1")).toThrow("EPERM");
+    expect(() => posix.setRole("lead", href("w1:p1"))).toThrow("EPERM");
     expect(leftovers(posix.root)).toEqual([]);
     const other = flaky(1, "ENOSPC");
-    expect(() => new Store(mkdtempSync(join(dir, "store-")), other).setRole("lead", "w1:p1")).toThrow("ENOSPC");
+    expect(() => new Store(mkdtempSync(join(dir, "store-")), other).setRole("lead", href("w1:p1"))).toThrow("ENOSPC");
     expect(other.sleeps).toEqual([]);
     const stuck = flaky(99);
     const s = new Store(mkdtempSync(join(dir, "store-")), stuck);
-    expect(() => s.setRole("lead", "w1:p1")).toThrow("EPERM");
+    expect(() => s.setRole("lead", href("w1:p1"))).toThrow("EPERM");
     expect(stuck.sleeps).toEqual([10, 20, 40, 80, 160, 320, 640, 1280]);
     expect(leftovers(s.root)).toEqual([]);
   });
@@ -153,7 +162,7 @@ describe("rename over an open file", () => {
     "a real process holding the target without share-delete: the write waits it out",
     async () => {
       const s = new Store(mkdtempSync(join(dir, "store-")));
-      s.setRole("lead", "w1:p1");
+      s.setRole("lead", href("w1:p1"));
       const target = join(s.root, "roles.json");
       // HELD only once the handle is really open; a failed Open prints why instead of a false HELD.
       const script =
@@ -185,7 +194,7 @@ describe("rename over an open file", () => {
 
       let released = false;
       const stubborn = new Store(s.root, { ...realFsOps, sleep: () => {} });
-      expect(() => stubborn.setRole("duty", "w1:p2")).toThrow(/EPERM|EACCES|EBUSY/);
+      expect(() => stubborn.setRole("duty", href("w1:p2"))).toThrow(/EPERM|EACCES|EBUSY/);
       const ops: FsOps = {
         ...realFsOps,
         sleep: () => {
@@ -198,9 +207,9 @@ describe("rename over an open file", () => {
         },
       };
       const retried = new Store(s.root, ops);
-      retried.setRole("duty", "w1:p2");
+      retried.setRole("duty", href("w1:p2"));
       expect(released).toBe(true);
-      expect(retried.roles()).toEqual({ lead: "w1:p1", duty: "w1:p2" });
+      expect(retried.roles()).toEqual({ lead: href("w1:p1"), duty: href("w1:p2") });
       await holder.exited;
     },
     30_000,
@@ -433,7 +442,7 @@ describe("pane command lines", () => {
 
   test("startLane and dori up work with a cmd pane", async () => {
     const { w, d, brief } = setup("cmd");
-    const lane = await startLane(d, "cmd-lane", brief, { workspace: "w1" });
+    const lane = await startLane(d, "cmd-lane", brief, { group: "w1" });
     expect(decoded(w.panes.get(lane.paneId)!.ran[0]!)).toStartWith("omo 'Read your brief at ");
 
     const log = console.log;
@@ -448,10 +457,10 @@ describe("pane command lines", () => {
     }
     const roles = d.store.roles();
     const up = /loop=(\S+) hourly=(\S+)/.exec(printed[0]!)!;
-    const prompted = decoded(w.panes.get(roles.lead!)!.ran[0]!);
+    const prompted = decoded(w.panes.get(roles.lead!.id)!.ran[0]!);
     expect(prompted).toStartWith("omo --append-system-prompt '");
     expect(prompted).toContain("lead.md");
-    expect(decoded(w.panes.get(roles.duty!)!.ran[0]!)).toContain("duty.md");
+    expect(decoded(w.panes.get(roles.duty!.id)!.ran[0]!)).toContain("duty.md");
     expect(w.panes.get(up[1]!)!.ran).toEqual(["dori duty --interval 60"]);
     expect(w.panes.get(up[2]!)!.ran).toEqual(["dori loop"]);
     const hourlySplit = w.calls.filter((c) => c.argv[1] === "split").at(-1)!;
@@ -459,31 +468,27 @@ describe("pane command lines", () => {
     expect(hourlySplit.argv.some((a) => a.startsWith("DORI_CMD="))).toBe(true);
   });
 
-  test.skipIf(!IS_WINDOWS)("a new pane's own shell decides the quoting, not the one this CLI runs in", async () => {
-    const seen: (readonly string[])[] = [];
-    const exec: Exec = async (_cmd, argv) => {
-      seen.push(argv);
-      return {
-        code: 0,
-        stderr: "",
-        stdout: JSON.stringify({ result: { process_info: { foreground_processes: [{ name: "cmd.exe" }] } } }),
-      };
-    };
+  test("a new session's own shell decides the quoting, not the one this CLI runs in", async () => {
+    const rt = (names: string[] | Error): SessionRuntime =>
+      ({
+        probe: async () => {
+          if (names instanceof Error) throw names;
+          return { status: "shell", shellInFront: true, foreground: names.map((name) => ({ name, argv: [name] })) };
+        },
+      }) as unknown as SessionRuntime;
+    const ref = href("w1:p2");
     const forced = process.env["DORI_PANE_SHELL"];
-    const session = process.env["DORI_HERDR_SESSION"];
     delete process.env["DORI_PANE_SHELL"];
-    process.env["DORI_HERDR_SESSION"] = "private";
     try {
-      expect(await paneShell(exec, "w1:p2", "pwsh")).toBe("cmd");
-      expect(seen[0]).toEqual(["--session", "private", "pane", "process-info", "--pane", "w1:p2"]);
-      expect(await paneShell(async () => ({ code: 1, stdout: "", stderr: "" }), "w1:p2", "pwsh")).toBe("pwsh");
+      expect(await sessionShell(rt(["C:\\WINDOWS\\system32\\cmd.exe"]), ref, "pwsh", true)).toBe("cmd");
+      expect(await sessionShell(rt(["pwsh.exe"]), ref, "posix", true)).toBe("pwsh");
+      expect(await sessionShell(rt(new Error("gone")), ref, "pwsh", true)).toBe("pwsh");
+      expect(await sessionShell(rt(["cmd.exe"]), ref, "posix", false)).toBe("posix");
       process.env["DORI_PANE_SHELL"] = "powershell";
-      expect(await paneShell(exec, "w1:p2", "pwsh")).toBe("powershell");
+      expect(await sessionShell(rt(["cmd.exe"]), ref, "pwsh", true)).toBe("powershell");
     } finally {
       if (forced === undefined) delete process.env["DORI_PANE_SHELL"];
       else process.env["DORI_PANE_SHELL"] = forced;
-      if (session === undefined) delete process.env["DORI_HERDR_SESSION"];
-      else process.env["DORI_HERDR_SESSION"] = session;
     }
   });
 });
@@ -497,7 +502,7 @@ describe("typing into a new pane", () => {
     const forced = process.env["DORI_PANE_SHELL"];
     delete process.env["DORI_PANE_SHELL"];
     try {
-      await startLane(d, "probe-order", brief, { cwd: d.store.root, workspace: "w1" });
+      await startLane(d, "probe-order", brief, { cwd: d.store.root, group: "w1" });
     } finally {
       if (forced !== undefined) process.env["DORI_PANE_SHELL"] = forced;
     }
@@ -507,68 +512,19 @@ describe("typing into a new pane", () => {
     expect(waited).toBeGreaterThanOrEqual(0);
     expect(probed).toBeGreaterThan(waited);
   });
-
-  const runs = async (windows: boolean, waitCode = 0) => {
-    const verbs: string[] = [];
-    const herdr = new Herdr(
-      async (_c, argv) => {
-        verbs.push(argv[1]!);
-        return { code: argv[1] === "wait-output" ? waitCode : 0, stdout: "", stderr: "" };
-      },
-      undefined,
-      windows,
-    );
-    await herdr.run("w1:p1", "omo");
-    return verbs;
-  };
-
-  test("on Windows the line waits for the shell's prompt, and is typed even when none is recognised", async () => {
-    expect(await runs(true)).toEqual(["wait-output", "run"]);
-    expect(await runs(true, 1)).toEqual(["wait-output", "run"]);
-  });
-
-  test("off Windows it is typed at once", async () => {
-    expect(await runs(false)).toEqual(["run"]);
-  });
+  // The prompt wait itself (and its absence off Windows) is tested on the adapter: test/runtime-herdr-windows.test.ts.
 });
 
 describe("typing into a plain shell pane (the operator's --to-shell)", () => {
-  const typed = async (windows: boolean, text: string) => {
-    const calls: string[][] = [];
-    const herdr = new Herdr(
-      async (_c, argv) => {
-        calls.push([...argv]);
-        const stdout = argv[1] === "get" ? JSON.stringify({ result: { pane: { pane_id: "w1:p1", agent: null } } }) : "";
-        return { code: 0, stdout, stderr: "" };
-      },
-      "",
-      windows,
-    );
-    expect(await herdr.typeIntoShell("w1:p1", text)).toBe(true);
-    return calls.filter((c) => c[1] !== "get").map((c) => c.slice(1, 2).concat(c.slice(3)).join(" "));
-  };
-
-  test("on Windows every line gets its own Enter, because a console does not read LF as one", async () => {
-    expect(await typed(true, "[READY x] done\r\n\nevidence: a")).toEqual([
-      "send-text [READY x] done",
-      "send-keys enter",
-      "send-text evidence: a",
-      "send-keys enter",
-    ]);
-  });
-
-  test("off Windows the text stays one send", async () => {
-    expect(await typed(false, "one\ntwo")).toEqual(["send-text one\ntwo", "send-keys enter"]);
-  });
-
+  // One Enter per line on Windows is tested on the adapter: test/runtime-herdr-windows.test.ts.
   test("a READY for a shell lead is never typed into it, on Windows either: it waits in the lead's inbox (#66)", async () => {
-    const { w, d, lead, brief } = setup();
-    const lane = await startLane(d, "shell-lead", brief, { workspace: "w1" });
+    const { d, lead, brief } = setup();
+    const lane = await startLane(d, "shell-lead", brief, { group: "w1" });
     lead.status = "shell";
     lead.received.length = 0;
-    await ready({ ...d, herdr: new Herdr(w.exec, "", true) }, lane.key, "fixed", ["note.txt"]);
+    await ready(d, lane.key, "fixed", ["note.txt"]);
     expect(lead.received).toEqual([]);
-    expect(d.store.queued("w1:p1").map((m) => m.text)).toContain("[READY shell-lead] fixed\nevidence: note.txt");
+    expect(d.store.queued(href("w1:p1")).map((m) => m.text)).toContain("[READY shell-lead] fixed\nevidence: note.txt");
   });
 });
 

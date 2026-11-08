@@ -2,7 +2,7 @@ import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import { existsSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
-import { spawnExec } from "../src/herdr.ts";
+import { spawnExec } from "../src/runtime/exec.ts";
 import { IS_WINDOWS, paneCommand, shellFromProcess, type PaneShell } from "../src/shell.ts";
 
 // Real herdr, isolated named session, fake agent instead of a model: proves the pane plumbing end to end.
@@ -10,7 +10,9 @@ const herdrBin = Bun.which("herdr");
 const session = `dori-e2e-${process.pid}`;
 const home = mkdtempSync(join(tmpdir(), "dori-e2e-"));
 const cli = resolve(import.meta.dir, "../src/cli.ts");
-const env = { ...process.env, DORI_HOME: home, DORI_HERDR_SESSION: session, DORI_TELEMETRY: "0" };
+// Pinned to herdr, and outside any session of the host's own runtimes, so the lane opens in the isolated session only.
+const { HC_TERMINAL_ID: _hc, HERDR_PANE_ID: _pane, HERDR_WORKSPACE_ID: _ws, ...outer } = process.env;
+const env = { ...outer, DORI_HOME: home, DORI_HERDR_SESSION: session, DORI_TELEMETRY: "0", DORI_RUNTIME: "herdr" };
 const fixture = (name: string) => resolve(import.meta.dir, "fixtures", name);
 let server: ReturnType<typeof Bun.spawn> | undefined;
 

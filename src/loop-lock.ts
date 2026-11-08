@@ -77,8 +77,7 @@ function takeOver(path: string, tmp: string, seen: LockFile, nonce: string): str
  * moved aside with rename(2) under a guard only one process can hold; if what was moved is not the lock judged
  * stale, it is linked back and this process backs off.
  */
-export function acquire(d: LockDeps): { nonce: string } | { holder: string } {
-  const path = d.store.loopPath("lock");
+export function acquire(d: LockDeps, path: string = d.store.lockPath("loop")): { nonce: string } | { holder: string } {
   const nonce = randomUUID();
   const tmp = `${path}.${nonce}`;
   writeFileSync(tmp, JSON.stringify({ pid: process.pid, at: d.now(), nonce }));
@@ -104,12 +103,11 @@ export function acquire(d: LockDeps): { nonce: string } | { holder: string } {
 }
 
 export const holds = (d: Deps, nonce: string): boolean => {
-  const l = readLock(d.store.loopPath("lock"));
+  const l = readLock(d.store.lockPath("loop"));
   return typeof l !== "string" && l.nonce === nonce;
 };
 
-export function release(d: LockDeps, nonce: string): void {
-  const path = d.store.loopPath("lock");
+export function release(d: LockDeps, nonce: string, path: string = d.store.lockPath("loop")): void {
   const aside = `${path}.release.${nonce}`;
   try {
     renameRetrying(path, aside);
