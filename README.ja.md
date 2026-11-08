@@ -1,4 +1,8 @@
-# dori-superagent
+# win-dori
+
+> **win-dori は [sisyphuslabs/dori-superagent](https://github.com/sisyphuslabs/dori-superagent) の Windows 移植版です。** Dori と dori-superagent は Sisyphus Labs のプロジェクトです。win-dori は上流のコミット [7ac0ed7](https://github.com/sisyphuslabs/dori-superagent/commit/7ac0ed761dfb6aa0b3a81e8740a29cde5cbd0444) に追従し、上流の挙動とデフォルトをそのまま保ちます。足しているのは Windows に必要なものだけです。PowerShell でのインストール、シェルを見分ける pane、自動起動と Slack リスナーを備えた Windows プロファイルです。Dori の功績は上流の作者にあり、Windows 部分のバグは私たちの責任です。上流の issue は [sisyphuslabs/dori-superagent/issues](https://github.com/sisyphuslabs/dori-superagent/issues) へどうぞ。
+
+> **ライセンス。** この移植から、win-dori は上流と同じく [Sustainable Use License](LICENSE) で提供されます。個人利用、社内業務での利用、無償の非商用利用に限られます。win-dori が何を変えたかは [NOTICE.md](NOTICE.md) にあります。`fa86ddf` までのバージョンは MIT で、引き続き MIT です。
 
 **Dori はあなたのチャットの中にいます。Slack、Telegram、Discord のどこからでも仕事を伝えると、ジョブごとに専用のコーディングエージェントセッションが立ち、マージまで追跡されます。マージの前には、その head に対する CLEAR レビューが必須です。**
 
@@ -10,7 +14,7 @@
 
 Dori は [Sisyphus Labs](https://sisyphuslabs.ai) のマルチセッション向けコーディングエージェント harness です。あなたと話すのは lead セッション一つだけです。依頼は lane になり、lane とは専用の herdr タブで動く [omo](https://github.com/code-yeongyu/oh-my-openagent) セッション一つと、そのための brief です。証拠が実物で確認できるまで lane は閉じません。duty ループが静かになった lane を動かし続け、マージゲートが成果物と `main` の間に立ちます。
 
-`dori` という名前のプログラムは二つあり、このリポジトリはその両方を配布しています。マシンごとにどちらか一つをインストールするか、harness を `bun src/cli.ts` で動かして `dori` は Dori mode に任せてください。
+ここには二つのプログラムがあります。win-dori ではハーネスが `dori-harness`(上流では `dori`)、Dori mode のメッセンジャー CLI が `dori` なので、一台のマシンに両方置けます。上流の文章で `dori up` や `dori merge` とあるところは、win-dori では `dori-harness up`、`dori-harness merge` です。
 
 | 構成要素 | 中身 | 使う場面 |
 |---|---|---|
@@ -21,8 +25,8 @@ Dori は [Sisyphus Labs](https://sisyphuslabs.ai) のマルチセッション向
 
 | 得られるもの | 意味 | 実装場所 |
 |---|---|---|
-| 待ち行列ではなく並列作業 | ジョブごとに専用タブと専用エージェントセッションが開き、同時にいくつでも走る | `dori start`、`src/lanes.ts` |
-| 証拠がなければ done にならない | lane は `dori ready --evidence <リンク>` で終わり、lead はそのリンクが実物で確認できてから閉じる | `src/lanes.ts` の `ready()`、`prompts/lane-footer.md` |
+| 待ち行列ではなく並列作業 | ジョブごとに専用タブと専用エージェントセッションが開き、同時にいくつでも走る | `dori-harness start`、`src/lanes.ts` |
+| 証拠がなければ done にならない | lane は `dori-harness ready --evidence <リンク>` で終わり、lead はそのリンクが実物で確認できてから閉じる | `src/lanes.ts` の `ready()`、`prompts/lane-footer.md` |
 | セッションを中断させない | 作業中のペイン宛てのメッセージは溜められ、ペインが idle になったときにまとめて届く | `src/inbox.ts` |
 | 沈黙に気づく | 10 分と 20 分で催促し、40 分で lead へエスカレーション | `src/duty.ts` の `NUDGE_MINUTES` |
 | 次の仕事を自分で見つける | 毎時のループが backlog から取り出し、lane 数とホストの制限を守り、人には判断だけを聞く | `src/loop.ts`、[docs/hourly-loop.md](docs/hourly-loop.md) |
@@ -46,9 +50,9 @@ Dori は [Sisyphus Labs](https://sisyphuslabs.ai) のマルチセッション向
 
 ユーザートークンは実在のメンバーとして振る舞います。有料シートが必要で、そのメンバーが見えるものはすべて見え、`dori presence slack` で緑のドットを保てます。bot トークンはシート不要で、招待されたチャネルと付与されたスコープだけが見え、アプリとして表示されます。どちらかを選んで記録してください。オンボーディングで何を読めるかがこれで決まります。
 
-```sh
-export DORI_SLACK_TOKEN=xoxp-...
-export DORI_SLACK_COOKIE=...          # `d` クッキー。ユーザートークンのときだけ
+```powershell
+$env:DORI_SLACK_TOKEN = "xoxp-..."
+$env:DORI_SLACK_COOKIE = "..."          # `d` クッキー。ユーザートークンのときだけ
 
 dori send slack --to C0123456789 --text "PR #12 はグリーン" --thread 1712345678.123456
 dori send slack --to C0123456789 --edit 1712345678.123456 --text "PR #12 マージ済み"
@@ -60,11 +64,11 @@ Dori が立てたスレッドへの、メンションの付かない返信も届
 
 ### Telegram
 
-```sh
-export DORI_TELEGRAM_TOKEN=...
-export DORI_TELEGRAM_OWNER_ID=123456789      # 依頼として扱うのはこのアカウントだけ
-export DORI_TELEGRAM_GROUP_ID=-1001234567890 # 任意: グループを一つ
-export DORI_TELEGRAM_TOPIC_ID=42             # 任意: その中のフォーラムトピックを一つ
+```powershell
+$env:DORI_TELEGRAM_TOKEN = "..."
+$env:DORI_TELEGRAM_OWNER_ID = "123456789"      # 依頼として扱うのはこのアカウントだけ
+$env:DORI_TELEGRAM_GROUP_ID = "-1001234567890" # 任意: グループを一つ
+$env:DORI_TELEGRAM_TOPIC_ID = "42"             # 任意: その中のフォーラムトピックを一つ
 
 dori send telegram --to -1001234567890 --thread 42 --text "PR #12 はグリーン"
 dori inbound telegram --loop 1
@@ -74,8 +78,8 @@ dori inbound telegram --loop 1
 
 ### Discord
 
-```sh
-export DORI_DISCORD_TOKEN=...
+```powershell
+$env:DORI_DISCORD_TOKEN = "..."
 
 dori send discord --to 123456789012345678 --text "PR #12 はグリーン"
 dori presence discord                 # gateway 上でオンライン表示を保つ
@@ -99,64 +103,101 @@ dori presence discord                 # gateway 上でオンライン表示を�
 
 ## インストール
 
-必要なものは [Bun](https://bun.sh) 1.4.4 以降、ペインをホストする端末マルチプレクサの [herdr](https://herdr.dev)、その中で走るコーディングエージェントの [omo](https://github.com/code-yeongyu/oh-my-openagent)、そしてレビュー、チェック、マージに使う GitHub CLI の `gh` です。
+[Bun](https://bun.sh) 1.4.4 以降、git、[herdr](https://herdr.dev) または herdr-core `hc`([ランタイム](#ランタイム) を参照)、pane の中で動くコーディングエージェント [omo](https://github.com/code-yeongyu/oh-my-openagent)、レビューとチェックとマージに使う GitHub CLI `gh` が必要です。
 
-### harness
+### Windows
+
+PowerShell で、どのフォルダからでも:
+
+```powershell
+irm https://raw.githubusercontent.com/useonmn/win-dori/main/install.ps1 | iex
+```
+
+チェックアウトがあれば cmd.exe で `install.cmd` を実行しても構いません。同じ引数で `install.ps1` を呼びます。
+
+インストールはこの一行で終わりです。git が必要で(なくて winget があれば `Git.Git` を入れます)、bun と herdr がなければ公式インストーラーで入れます(`DORI_NO_DEPS=1` で無効)。インストール先は `%USERPROFILE%\.dori\src` で、もう一度実行するとその複製を更新します(`DORI_NO_PULL=1` で pull を省略)。スキルは `%USERPROFILE%\.agents\skills\dori-mode` にディレクトリジャンクションでリンクするので、管理者権限も開発者モードもいりません。`bun install` と `bun link` を実行し、bun のグローバル bin フォルダをユーザーの PATH に足します。そのあと `profile/` の Windows プロファイルを配置します。`DORI_SKIP_PROFILE=1` ならそれを飛ばし、例の設定を `%USERPROFILE%\.dori\config.json` にコピーします。`DORI_SRC`、`SKILLS_DIR`、`DORI_HOME` で場所を変え、`DORI_REPO` でフォークを指せます。PATH の変更を反映させるため、終わったら新しいターミナルを開いてください。
+
+あとは herdr を開き、その中で omo を起動して「Dori mode」と言うだけです。
+
+### Windows プロファイル
+
+どのメッセンジャーを選んでも、プロファイルが再起動後も Dori を動かし続けます。起動スクリプト、設定、自動起動タスク、Slack ならチャンネルのルールとアプリマニフェスト付きの Socket Mode 受信リスナーです。ユーザー名、フォルダ、チャンネルはどこにも書かれていません。パスはすべて `%USERPROFILE%` から、id はすべてあなたのトークンから得ます。
+
+初めて「Dori mode」と言うと、Dori が会話の中で自分を設定します。メッセンジャーを尋ね、あなただけが読めるメモ帳ファイルを開いてトークンを受け取ります(トークンをチャットに貼らないでください)。`dori setup <messenger>` がトークンを確かめ、分かる id を埋め、あなたの Windows ユーザーだけが読める `%USERPROFILE%\.dori\<messenger>.env`(`slack.env`、`telegram.env`、`discord.env`)を保存し、`Dori Autostart` タスクを登録します。以後はログオンすると herdr が起動し、Dori の名前のワークスペースが開き、そこでエージェントが始まります。
+
+Slack リスナーは拾ったメッセージに目のリアクションを付け、スレッドに作業中のステータスを出し、Dori が返信すると目をチェックマークに替えます。
+
+プロファイルの手順は何度実行しても安全です。編集したファイルは残して差分を見せ、`config.json` は作るだけで置き換えません。`DORI_DRY_RUN=1` はプレビュー、`DORI_FORCE=1` は編集済みファイルを置き換えて `.bak-<time>` の複製を残し、`DORI_NO_TASK=1` はタスクを登録しません。実行のたびに、それを元に戻す `%USERPROFILE%\.dori\undo-profile-<time>.ps1` を書き出します。構成要素の一覧は [profile/INVENTORY.md](profile/INVENTORY.md) にあり、チェックアウトから `profile\install-profile.ps1 -DryRun` でプロファイルの手順だけを実行できます。
+
+### ランタイム
+
+レーンは herdr か herdr-core `hc` の中で動きます。選ぶ順番は、先に当てはまったものが勝ちです。`DORI_RUNTIME`、`config.json` の `runtime` キー、`HC_TERMINAL_ID`(hc の中にいる)、`HERDR_PANE_ID`(herdr の中にいる)、最後に PATH にある片方のバイナリです。PATH に herdr だけがあれば herdr が既定です。Windows では hc を herdr-core の公式インストーラーで入れます。
+
+### macOS と Linux
 
 ```sh
-git clone https://github.com/sisyphuslabs/dori-superagent
-cd dori-superagent
+curl -fsSL https://raw.githubusercontent.com/useonmn/win-dori/main/install.sh | bash
+```
+
+リポジトリを `~/.dori/src` にクローンし、スキルを `~/.agents/skills/dori-mode` にリンクし、`dori` を PATH に載せ、例の設定を `~/.dori/config.json` にコピーします。
+
+### チェックアウトからハーネスを使う
+
+```powershell
+git clone https://github.com/useonmn/win-dori
+cd win-dori
 bun install
-bun link        # `dori` を PATH に置く。入れない場合は下の例を `bun src/cli.ts` に読み替える
+bun link        # `dori-harness` を PATH に載せます。しない場合は `bun src/cli.ts` を使います
 ```
 
-### Dori mode（メッセンジャー CLI）
+そのあと `~/.dori/config.json` に少なくとも `leadPane`(`herdr pane current` で分かります)、`laneWorkspace`、`defaultCwd` を設定してください。
 
-```sh
-curl -fsSL https://raw.githubusercontent.com/sisyphuslabs/dori-superagent/main/install.sh | bash
-```
+### Windows での注意
 
-このスクリプトはリポジトリを `~/.dori/src` に clone し、スキルを `~/.agents/skills/dori-mode` にリンクし、Dori mode の `dori` を PATH に置き、`references/config.example.json` を `~/.dori/config.json` にコピーします。そのあと設定ファイルを編集してください。少なくとも `leadPane`（`herdr pane current` の値）、`laneWorkspace`、`defaultCwd` が必要です。
+- トークンはユーザー環境変数ではなく `~/.dori/<messenger>.env` に置きます。`dori` がそのファイル(または `DORI_ENV_FILE` のファイル)を自分で読みます。その場限りのシェルでは、上の例のように `$env:DORI_SLACK_TOKEN = "xoxp-..."` で設定します。
+- ハーネスは pane にコマンドを打ち込むので、pane ごとにシェルを調べてそれに合わせてクォートします。pwsh、Windows PowerShell 5.1、cmd、Git Bash です。`DORI_PANE_SHELL`(`posix`、`pwsh`、`powershell`、`cmd`)で上書きできます。
+- ホストガードは `powershell.exe` の呼び出し一回で負荷、メモリ、スワップ、ディスクを読みます。負荷は CPU 使用率かける CPU 数にプロセッサキューを足した値なので、Unix の 1 分平均より大きく揺れます。
+- `Done =` のコマンドは `["bun","test"]` のような argv のリストなので、同じ行が Windows、macOS、Linux で通ります。
 
 ## クイックスタート
 
 herdr のサーバーを起動してから、harness を立ち上げます。
 
 ```sh
-dori up
+dori-harness up
 # UP lead=w1:p1 duty=w1:p2 loop=w1:p3 hourly=w1:p4 home=~/.dori
 ```
 
 `dori` という名前の herdr ワークスペースが開き、lead（`prompts/lead.md` をシステムプロンプトに追記した omo セッション）と、その下に duty セッション、duty ループ、毎時のループが並びます。lead に話しかけてください。lead は brief（目的、入力、成果物、停止条件、制約。[examples/brief.md](examples/brief.md) 参照）を書き、自分で lane を開きます。シェルから開くこともできます。
 
 ```sh
-dori start fix-flaky-login --brief examples/brief.md
-# STARTED fix-flaky-login pane=w1:p5 brief=/Users/you/.dori/briefs/fix-flaky-login.md
+dori-harness start fix-flaky-login --brief examples/brief.md
+# STARTED fix-flaky-login pane=w1:p5 brief=~/.dori/briefs/fix-flaky-login.md
 
-dori status
-# lead=w1:p1 duty=w1:p2 home=/Users/you/.dori
+dori-harness status
+# lead=w1:p1 duty=w1:p2 home=~/.dori
 # fix-flaky-login         working  w1:p5    active 0m ago  start: examples/brief.md
 ```
 
 lane のキーは `^[a-z][a-z0-9-]{1,40}$` に一致し、すでに開いているキーは拒否されます。lane の中では、lane のルールが渡すコマンドで報告し、終わります。
 
 ```sh
-dori report fix-flaky-login --text '再現: 20 回中 1 回失敗、共有セッションフィクスチャ'
-dori report fix-flaky-login --status waiting --text 'WAITING: owner/repo#12 のチェック待ち'
-dori ready fix-flaky-login --text '原因を修正、チェックはグリーン' --evidence https://github.com/owner/repo/pull/12
+dori-harness report fix-flaky-login --text '再現: 20 回中 1 回失敗、共有セッションフィクスチャ'
+dori-harness report fix-flaky-login --status waiting --text 'WAITING: owner/repo#12 のチェック待ち'
+dori-harness ready fix-flaky-login --text '原因を修正、チェックはグリーン' --evidence https://github.com/owner/repo/pull/12
 # READY fix-flaky-login
 ```
 
 lead はペインで `[READY fix-flaky-login]` を読み、自分でゲートを回します。
 
 ```sh
-dori review owner/repo#12             # head に固定した新しい omo レビュアー。receipt を書く
-dori merge owner/repo#12 --dry-run    # MERGE_OK owner/repo#12 head=<sha> (dry run)、または MERGE_REFUSED <理由>
-dori merge owner/repo#12              # gh pr merge --squash --match-head-commit <sha>
-dori done fix-flaky-login             # lane のタブを閉じる。READY の lane だけが閉じられる
+dori-harness review owner/repo#12             # head に固定した新しい omo レビュアー。receipt を書く
+dori-harness merge owner/repo#12 --dry-run    # MERGE_OK owner/repo#12 head=<sha> (dry run)、または MERGE_REFUSED <理由>
+dori-harness merge owner/repo#12              # gh pr merge --squash --match-head-commit <sha>
+dori-harness done fix-flaky-login             # lane のタブを閉じる。READY の lane だけが閉じられる
 ```
 
-`dori send <lead|duty|key|pane> --text '...'` はペインへ届けるか、忙しければ溜めます。`--text` を省くと標準入力から読みます。エージェントが受け取るコマンドは `src/cli.ts` の絶対パスと `DORI_HOME` を設定した形で描画されるので、PATH 上の `dori` がどちらでも動きます。
+`dori-harness send <lead|duty|key|pane> --text '...'` はペインへ届けるか、忙しければ溜めます。`--text` を省くと標準入力から読みます。エージェントが受け取るコマンドは `src/cli.ts` の絶対パスと `DORI_HOME` を設定した形で描画されるので、PATH 上の `dori` がどちらでも動きます。
 
 ## 仕組み
 
@@ -164,17 +205,17 @@ dori done fix-flaky-login             # lane のタブを閉じる。READY の l
 
 あなたと話すのは lead だけです。lead は依頼を brief にし、lane を開き、lane からの報告を読み、マージします。
 
-lane は専用タブのエージェントセッション一つで、brief 一つと lane のルール（`prompts/lane-footer.md`）を追記して起動します。区切りは `dori report` で報告し、最後は `dori ready` で終わります。証拠のリンクがなければ `dori ready` は通りません。lane の行動はすべて一行になって lead に届きます。`[START]`、`[REPORT]`、`[READY]`、`[LOST]`、`[ESCALATE]` です。
+lane は専用タブのエージェントセッション一つで、brief 一つと lane のルール（`prompts/lane-footer.md`）を追記して起動します。区切りは `dori-harness report` で報告し、最後は `dori-harness ready` で終わります。証拠のリンクがなければ `dori-harness ready` は通りません。lane の行動はすべて一行になって lead に届きます。`[START]`、`[REPORT]`、`[READY]`、`[LOST]`、`[ESCALATE]` です。
 
-duty ループは `dori duty --interval 60` で、duty セッションの隣で動く普通のプロセスです。tick ごとに、idle になったペインへ溜まったメッセージを流し、黙った lane を催促し、lead にエスカレーションし、ペインが消えた lane を lost として記録します。
+duty ループは `dori-harness duty --interval 60` で、duty セッションの隣で動く普通のプロセスです。tick ごとに、idle になったペインへ溜まったメッセージを流し、黙った lane を催促し、lead にエスカレーションし、ペインが消えた lane を lost として記録します。
 
-毎時のループは `dori loop` です。一時間ごとに backlog を現実と突き合わせ、見落としを監査し、誰の判断も要らない次の項目を開始し、開いている問いを一度だけ聞き、報告を一つ送ります。マージも push もペインの閉鎖もしません。
+毎時のループは `dori-harness loop` です。一時間ごとに backlog を現実と突き合わせ、見落としを監査し、誰の判断も要らない次の項目を開始し、開いている問いを一度だけ聞き、報告を一つ送ります。マージも push もペインの閉鎖もしません。
 
 状態は `~/.dori`（または `$DORI_HOME`）配下の JSON です。`lanes/`、`inbox/`、`briefs/`、`receipts/`、そして毎時のループ用の `backlog/` と `loop/`、停止ファイル用の `duty/` があります。harness が追加する常駐プロセスはこの二つのループだけで、実行時の依存は Bun だけです。
 
 ### マージゲート
 
-`dori merge` は `gh` で PR の head SHA を読み、理由を名指しして拒否します。
+`dori-harness merge` は `gh` で PR の head SHA を読み、理由を名指しして拒否します。
 
 | 拒否 | 意味 |
 |---|---|
@@ -184,7 +225,7 @@ duty ループは `dori duty --interval 60` で、duty セッションの隣で�
 | `checks_red` | 失敗したチェックがある |
 | `checks_all_skipped` | すべてのチェックが skip され、何も通っていない |
 
-receipt を書くのは `dori review` だけで、他の何も書きません。head に固定した `prompts/review.md` を非対話の omo に渡して実行し、`VERDICT:` 行を出さないレビュアーは receipt を残しません。レビューの後に push すれば head が動くので、古い receipt は効きません。
+receipt を書くのは `dori-harness review` だけで、他の何も書きません。head に固定した `prompts/review.md` を非対話の omo に渡して実行し、`VERDICT:` 行を出さないレビュアーは receipt を残しません。レビューの後に push すれば head が動くので、古い receipt は効きません。
 
 `~/.dori/config.json` の `hooks.reviewCommand` で、内蔵レビュアーを自前のコマンドに差し替えられます。同じ `VERDICT:` 行を出す必要があります。
 
@@ -194,19 +235,19 @@ harness、`src/cli.ts`。
 
 | コマンド | 内容 |
 |---|---|
-| `dori up [--cwd DIR]` | lead、duty、duty ループ、毎時のループのペインを開く |
-| `dori start <key> --brief FILE [--cwd DIR]` | lane を開く。新しいタブ、エージェントセッション、brief と lane ルール |
-| `dori report <key> --text T [--status working\|waiting]` | lane が区切りまたは待ちを記録する |
-| `dori ready <key> --text T --evidence LINK` | lane が終わる。証拠がなければ拒否 |
-| `dori review <owner/repo#N> [--model M]` | その head での新しいレビュアー。receipt を書く |
-| `dori merge <owner/repo#N> [--dry-run]` | CLEAR の receipt とグリーンのチェックのうえで squash マージ |
-| `dori done <key>` | lead が READY の lane を閉じる |
-| `dori status` | ロールと開いているすべての lane |
-| `dori duty [--once] \| stop \| resume \| status` | duty ループと停止スイッチ |
-| `dori loop [--once] \| stop \| resume \| status` | 毎時のループと停止スイッチ |
-| `dori backlog add \| list \| decide \| drop \| import` | 毎時のループが取り出す待ち行列 |
-| `dori send <target> --text T` と `dori inbox list\|ack\|resend` | 配送、待機、保留された配送の解決 |
-| `dori role <lead\|duty> [PANE]` | `dori up` を使わなかったときにペインを登録する |
+| `dori-harness up [--cwd DIR]` | lead、duty、duty ループ、毎時のループのペインを開く |
+| `dori-harness start <key> --brief FILE [--cwd DIR]` | lane を開く。新しいタブ、エージェントセッション、brief と lane ルール |
+| `dori-harness report <key> --text T [--status working\|waiting]` | lane が区切りまたは待ちを記録する |
+| `dori-harness ready <key> --text T --evidence LINK` | lane が終わる。証拠がなければ拒否 |
+| `dori-harness review <owner/repo#N> [--model M]` | その head での新しいレビュアー。receipt を書く |
+| `dori-harness merge <owner/repo#N> [--dry-run]` | CLEAR の receipt とグリーンのチェックのうえで squash マージ |
+| `dori-harness done <key>` | lead が READY の lane を閉じる |
+| `dori-harness status` | ロールと開いているすべての lane |
+| `dori-harness duty [--once] \| stop \| resume \| status` | duty ループと停止スイッチ |
+| `dori-harness loop [--once] \| stop \| resume \| status` | 毎時のループと停止スイッチ |
+| `dori-harness backlog add \| list \| decide \| drop \| import` | 毎時のループが取り出す待ち行列 |
+| `dori-harness send <target> --text T` と `dori-harness inbox list\|ack\|resend` | 配送、待機、保留された配送の解決 |
+| `dori-harness role <lead\|duty> [PANE]` | `dori-harness up` を使わなかったときにペインを登録する |
 
 引数なしで `bun src/cli.ts` を実行すると、すべてのフラグ付きで同じ一覧が出ます。
 
@@ -251,14 +292,16 @@ bun run ci          # Biome、tsc、knip、250 行のラチェット、そのあ
 
 どちらのスイートもモデルもネットワークも要りません。harness は偽の herdr と偽の `gh` に対して、Dori mode は偽の herdr、git、`gh` に対して走ります。エンドツーエンドのテスト二つは本物の herdr サーバーを起動し、`herdr` が PATH にないときは自分自身を skip します。
 
+Windows プロファイルには専用のテストがあります(Windows のみ): `cd profile; bun test`。追跡されているファイルにハードコードされたユーザーパスや個人の値があると、`bun scripts/check-paths.ts` が失敗します。
+
 ## テレメトリー
 
 `dori` は omo と同じやり方で匿名の利用数を送ります。`https://t.omo.dev` への OTLP/HTTP JSON で、`~/.dori/telemetry.json` に置いたランダムなインストール id の sha256 だけを送ります。外に出るのは数と固定の enum です。インストール、日次アクティブ、lane 開始、lane ready、レビュー完了、マージ判定、そして一時間に一度の duty サマリーです。パス、リポジトリ名、PR 番号、lane キー、brief、メッセージその他のテキストは送りません。`DORI_TELEMETRY=0` で止まり（`DO_NOT_TRACK=1` も効きます）、`DORI_TELEMETRY_ENDPOINT` で送り先を変えられます。テレメトリーがコマンドを失敗させることはありません。
 
 ## コントリビュート
 
-コントリビューターは、レビューやマージの前に[コントリビューターライセンス契約](CLA.md)へ一度署名します。プルリクエストに `I have read the CLA Document and I hereby sign the CLA` とコメントしてください。ゲート、テストコマンド、プルリクエストの規則は [CONTRIBUTING.md](CONTRIBUTING.md) にあります。
+コントリビューターは、レビューやマージの前に[コントリビューターライセンス契約](https://github.com/sisyphuslabs/dori-superagent/blob/main/CLA.md)へ一度署名します。プルリクエストに `I have read the CLA Document and I hereby sign the CLA` とコメントしてください。ゲート、テストコマンド、プルリクエストの規則は [CONTRIBUTING.md](CONTRIBUTING.md) にあります。
 
 ## ライセンス
 
-このプロジェクトは [Sustainable Use License](LICENSE) 1.0 で提供され、サードパーティの構成要素はそれぞれのライセンスに従います。自分の業務での内部利用と、非営利または個人での利用を対象とします。商用利用には所有者のライセンスが必要です。`ba96abf` より前のコミットは公開時の MIT ライセンスのままで、この変更はそのコミットから適用されます。`prompts/` にあるプロンプトはエージェントが実際に受け取る指示そのもので、信じる前に読み切れる長さしかありません。
+上流 [7ac0ed7](https://github.com/sisyphuslabs/dori-superagent/commit/7ac0ed761dfb6aa0b3a81e8740a29cde5cbd0444) の移植から、win-dori は上流と同じく [Sustainable Use License](LICENSE) 1.0 で提供され、サードパーティのコンポーネントはそれぞれのライセンスに従います。個人利用、社内業務での利用、無償の非商用利用が認められ、商用利用には所有者である Sisyphus Labs のライセンスが必要です。win-dori が何を変えたかは [NOTICE.md](NOTICE.md) にあります。`fa86ddf` までの win-dori のバージョンは MIT で、引き続き MIT です。`prompts/` のプロンプトはエージェントが実際に受け取る指示で、信頼する前に読み切れるほど短いものです。

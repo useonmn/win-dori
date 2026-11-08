@@ -1,4 +1,8 @@
-# dori-superagent
+# win-dori
+
+> **win-dori는 [sisyphuslabs/dori-superagent](https://github.com/sisyphuslabs/dori-superagent)의 Windows 포트입니다.** Dori와 dori-superagent는 Sisyphus Labs의 프로젝트이고, win-dori는 업스트림 커밋 [7ac0ed7](https://github.com/sisyphuslabs/dori-superagent/commit/7ac0ed761dfb6aa0b3a81e8740a29cde5cbd0444)을 따르며 업스트림의 동작과 기본값을 그대로 둡니다. 더한 것은 Windows에 필요한 것뿐입니다. PowerShell 설치, 셸을 가려 쓰는 pane, 자동 시작과 Slack 리스너가 들어 있는 Windows 프로필입니다. Dori의 공은 업스트림 저자들에게 있고, Windows 부분의 버그는 저희 몫입니다. 업스트림 이슈는 [sisyphuslabs/dori-superagent/issues](https://github.com/sisyphuslabs/dori-superagent/issues)에 올려 주세요.
+
+> **라이선스.** 이번 포트부터 win-dori는 업스트림과 같이 [Sustainable Use License](LICENSE)를 따릅니다. 개인 사용, 사내 업무용 사용, 무료 비상업적 사용만 허용됩니다. win-dori가 무엇을 바꿨는지는 [NOTICE.md](NOTICE.md)에 있습니다. `fa86ddf`까지의 버전은 MIT였고 그대로 MIT입니다.
 
 **Dori는 당신의 채팅 안에 있습니다. Slack, Telegram, Discord에서 시키면 일마다 전용 코딩 에이전트 세션이 열리고, 머지까지 추적합니다. 머지 전에는 그 head에 대한 CLEAR 리뷰가 반드시 있어야 합니다.**
 
@@ -10,7 +14,7 @@
 
 Dori는 [Sisyphus Labs](https://sisyphuslabs.ai)가 만든 멀티 세션 코딩 에이전트 하네스입니다. 사용자와 이야기하는 세션은 리드 하나입니다. 요청 하나가 레인 하나가 됩니다. 레인은 herdr 탭 하나에서 도는 [omo](https://github.com/code-yeongyu/oh-my-openagent) 세션과 그 세션에 건네는 브리프이고, 증거를 실물에서 다시 읽기 전까지 닫히지 않습니다. 듀티 루프가 조용해진 레인을 계속 움직이고, 머지 게이트가 작업물과 `main` 사이에 서 있습니다.
 
-`dori`라는 이름의 프로그램이 둘이고, 이 저장소는 둘 다 배포합니다. 머신마다 하나를 설치하거나, 하네스를 `bun src/cli.ts`로 돌리고 `dori`는 Dori mode에 맡기면 됩니다.
+여기에는 프로그램이 둘 들어 있습니다. 하네스는 win-dori에서 `dori-harness`이고(업스트림은 `dori`라고 부릅니다), Dori mode의 메신저 CLI가 `dori`라서 한 머신에 둘 다 둘 수 있습니다. 업스트림 글에 `dori up`이나 `dori merge`가 나오는 곳에서 win-dori는 `dori-harness up`, `dori-harness merge`를 씁니다.
 
 | 구성 | 무엇인가 | 언제 쓰나 |
 |---|---|---|
@@ -21,8 +25,8 @@ Dori는 [Sisyphus Labs](https://sisyphuslabs.ai)가 만든 멀티 세션 코딩 
 
 | 얻는 것 | 뜻 | 구현 위치 |
 |---|---|---|
-| 대기열이 아니라 병렬 작업 | 일마다 전용 탭과 전용 에이전트 세션이 열리고, 여러 개가 동시에 돕니다 | `dori start`, `src/lanes.ts` |
-| 스스로 증명해야 하는 완료 | 레인은 `dori ready --evidence <링크>`로 끝나고, 리드는 그 링크를 실물에서 읽은 뒤에야 닫습니다 | `src/lanes.ts`의 `ready()`, `prompts/lane-footer.md` |
+| 대기열이 아니라 병렬 작업 | 일마다 전용 탭과 전용 에이전트 세션이 열리고, 여러 개가 동시에 돕니다 | `dori-harness start`, `src/lanes.ts` |
+| 스스로 증명해야 하는 완료 | 레인은 `dori-harness ready --evidence <링크>`로 끝나고, 리드는 그 링크를 실물에서 읽은 뒤에야 닫습니다 | `src/lanes.ts`의 `ready()`, `prompts/lane-footer.md` |
 | 끊기지 않는 세션 | 작업 중인 pane에 보낸 메시지는 쌓였다가 pane이 idle이 되면 한 묶음으로 도착합니다 | `src/inbox.ts` |
 | 침묵을 알아챔 | 10분과 20분에 재촉하고, 40분에 리드로 올립니다 | `src/duty.ts`의 `NUDGE_MINUTES` |
 | 다음 일을 스스로 찾음 | 매시간 루프가 백로그에서 꺼내고, 레인 수와 호스트 한도를 지키고, 사람에게는 결정만 묻습니다 | `src/loop.ts`, [docs/hourly-loop.md](docs/hourly-loop.md) |
@@ -46,9 +50,9 @@ Dori는 [Sisyphus Labs](https://sisyphuslabs.ai)가 만든 멀티 세션 코딩 
 
 사용자 토큰은 실제 멤버로 행동합니다. 유료 seat이 필요하고, 그 멤버가 보는 것은 다 보이고, `dori presence slack`으로 초록 점을 유지할 수 있습니다. 봇 토큰은 seat 비용이 없고, 초대받은 채널과 허용된 scope만 보이고, 앱으로 표시됩니다. 하나를 골라 기록해 두십시오. 이 선택이 온보딩에서 읽을 수 있는 범위를 정합니다.
 
-```sh
-export DORI_SLACK_TOKEN=xoxp-...
-export DORI_SLACK_COOKIE=...          # `d` 쿠키, 사용자 토큰일 때만
+```powershell
+$env:DORI_SLACK_TOKEN = "xoxp-..."
+$env:DORI_SLACK_COOKIE = "..."          # `d` 쿠키, 사용자 토큰일 때만
 
 dori send slack --to C0123456789 --text "PR #12 초록" --thread 1712345678.123456
 dori send slack --to C0123456789 --edit 1712345678.123456 --text "PR #12 머지됨"
@@ -60,11 +64,11 @@ Dori가 연 스레드에 멘션 없이 달린 답글도 도착합니다. 받기�
 
 ### Telegram
 
-```sh
-export DORI_TELEGRAM_TOKEN=...
-export DORI_TELEGRAM_OWNER_ID=123456789      # 이 계정의 메시지만 요청입니다
-export DORI_TELEGRAM_GROUP_ID=-1001234567890 # 선택: 그룹 하나
-export DORI_TELEGRAM_TOPIC_ID=42             # 선택: 그 안의 포럼 토픽 하나
+```powershell
+$env:DORI_TELEGRAM_TOKEN = "..."
+$env:DORI_TELEGRAM_OWNER_ID = "123456789"      # 이 계정의 메시지만 요청입니다
+$env:DORI_TELEGRAM_GROUP_ID = "-1001234567890" # 선택: 그룹 하나
+$env:DORI_TELEGRAM_TOPIC_ID = "42"             # 선택: 그 안의 포럼 토픽 하나
 
 dori send telegram --to -1001234567890 --thread 42 --text "PR #12 초록"
 dori inbound telegram --loop 1
@@ -74,8 +78,8 @@ dori inbound telegram --loop 1
 
 ### Discord
 
-```sh
-export DORI_DISCORD_TOKEN=...
+```powershell
+$env:DORI_DISCORD_TOKEN = "..."
 
 dori send discord --to 123456789012345678 --text "PR #12 초록"
 dori presence discord                 # gateway에서 온라인 표시 유지
@@ -99,64 +103,101 @@ dori presence discord                 # gateway에서 온라인 표시 유지
 
 ## 설치
 
-[Bun](https://bun.sh) 1.4.4 이상, pane을 호스팅하는 터미널 멀티플렉서 [herdr](https://herdr.dev), 그 안에서 도는 코딩 에이전트 [omo](https://github.com/code-yeongyu/oh-my-openagent), 그리고 리뷰와 체크와 머지에 쓰는 GitHub CLI `gh`가 필요합니다.
+[Bun](https://bun.sh) 1.4.4 이상, git, [herdr](https://herdr.dev) 또는 herdr-core `hc`([런타임](#런타임) 참고), pane 안에서 도는 코딩 에이전트 [omo](https://github.com/code-yeongyu/oh-my-openagent), 그리고 리뷰와 체크, 머지에 쓰는 GitHub CLI `gh`가 필요합니다.
 
-### 하네스
+### Windows
+
+PowerShell에서, 어느 폴더에서든:
+
+```powershell
+irm https://raw.githubusercontent.com/useonmn/win-dori/main/install.ps1 | iex
+```
+
+체크아웃이 있다면 cmd.exe에서 `install.cmd`를 실행해도 됩니다. 같은 인자로 `install.ps1`을 부릅니다.
+
+설치는 이 한 줄이 전부입니다. git이 필요하고(없는데 winget이 있으면 `Git.Git`을 설치합니다), bun과 herdr가 없으면 공식 설치 프로그램으로 설치합니다(`DORI_NO_DEPS=1`로 끕니다). 설치 위치는 `%USERPROFILE%\.dori\src`이고, 다시 실행하면 그 사본을 업데이트합니다(`DORI_NO_PULL=1`이면 pull을 건너뜁니다). 스킬은 `%USERPROFILE%\.agents\skills\dori-mode`에 디렉터리 정션으로 연결되므로 관리자 권한도 개발자 모드도 필요 없습니다. `bun install`과 `bun link`를 실행하고 bun의 전역 bin 폴더를 사용자 PATH에 더합니다. 그다음 `profile/`의 Windows 프로필을 배치합니다. `DORI_SKIP_PROFILE=1`이면 이를 건너뛰고 예시 설정을 `%USERPROFILE%\.dori\config.json`에 복사합니다. `DORI_SRC`, `SKILLS_DIR`, `DORI_HOME`으로 위치를 바꾸고, `DORI_REPO`로 포크를 지정합니다. PATH 변경이 반영되도록 끝나면 새 터미널을 여세요.
+
+그다음 herdr를 열고 그 안에서 omo를 시작해 "Dori mode"라고 말하면 됩니다.
+
+### Windows 프로필
+
+프로필은 어떤 메신저를 고르든 재부팅 뒤에도 Dori가 계속 돌게 해 줍니다. 부트 스크립트, 설정, 자동 시작 작업, 그리고 Slack이라면 채널 규칙과 앱 매니페스트가 딸린 Socket Mode 인바운드 리스너가 들어 있습니다. 사용자나 폴더, 채널 이름은 어디에도 없습니다. 경로는 모두 `%USERPROFILE%`에서, id는 모두 당신의 토큰에서 나옵니다.
+
+처음 "Dori mode"라고 말하면 Dori가 대화로 스스로 설정합니다. 메신저를 묻고, 당신만 읽을 수 있는 메모장 파일을 열어 토큰을 받습니다(토큰을 채팅에 붙여 넣지 마세요). `dori setup <messenger>`가 토큰을 확인하고, 알아낼 수 있는 id를 채우고, 당신의 Windows 사용자만 읽을 수 있는 `%USERPROFILE%\.dori\<messenger>.env`(`slack.env`, `telegram.env`, `discord.env`)를 저장한 뒤 `Dori Autostart` 작업을 등록합니다. 그 뒤로는 로그온하면 herdr가 뜨고, Dori 이름을 딴 워크스페이스가 열리고, 거기서 에이전트가 시작됩니다.
+
+Slack 리스너는 집어 든 메시지마다 눈 리액션을 달고 스레드에 작업 중 상태를 띄우며, Dori가 답하면 눈을 체크 표시로 바꿉니다.
+
+프로필 단계는 다시 실행해도 안전합니다. 직접 고친 파일은 그대로 두고 차이를 보여 주며, `config.json`은 만들기만 하고 바꾸지 않습니다. `DORI_DRY_RUN=1`은 미리 보기, `DORI_FORCE=1`은 고친 파일을 덮어쓰고 `.bak-<time>` 사본을 남기며, `DORI_NO_TASK=1`은 작업을 등록하지 않습니다. 실행할 때마다 되돌리는 스크립트 `%USERPROFILE%\.dori\undo-profile-<time>.ps1`이 생깁니다. 구성 요소 목록은 [profile/INVENTORY.md](profile/INVENTORY.md)에 있고, 체크아웃에서 `profile\install-profile.ps1 -DryRun`으로 프로필 단계만 돌릴 수 있습니다.
+
+### 런타임
+
+레인은 herdr나 herdr-core `hc`에서 돕니다. 고르는 순서는 먼저 맞는 것이 이깁니다. `DORI_RUNTIME`, `config.json`의 `runtime` 키, `HC_TERMINAL_ID`(hc 안에 있음), `HERDR_PANE_ID`(herdr 안에 있음), 마지막으로 PATH에 있는 둘 중 하나의 바이너리입니다. PATH에 herdr만 있으면 herdr가 기본입니다. Windows에서는 hc를 herdr-core의 공식 설치 프로그램으로 설치합니다.
+
+### macOS와 Linux
 
 ```sh
-git clone https://github.com/sisyphuslabs/dori-superagent
-cd dori-superagent
+curl -fsSL https://raw.githubusercontent.com/useonmn/win-dori/main/install.sh | bash
+```
+
+저장소를 `~/.dori/src`에 클론하고, 스킬을 `~/.agents/skills/dori-mode`에 연결하고, `dori`를 PATH에 올리고, 예시 설정을 `~/.dori/config.json`에 복사합니다.
+
+### 체크아웃에서 하네스 쓰기
+
+```powershell
+git clone https://github.com/useonmn/win-dori
+cd win-dori
 bun install
-bun link        # `dori`를 PATH에 올립니다. 하지 않으면 아래 예시의 `dori`를 `bun src/cli.ts`로 바꿔 쓰십시오
+bun link        # `dori-harness`를 PATH에 올립니다. 안 하면 `bun src/cli.ts`를 쓰세요
 ```
 
-### Dori mode, 메신저 CLI
+그다음 `~/.dori/config.json`에 적어도 `leadPane`(`herdr pane current`로 확인), `laneWorkspace`, `defaultCwd`를 넣으세요.
 
-```sh
-curl -fsSL https://raw.githubusercontent.com/sisyphuslabs/dori-superagent/main/install.sh | bash
-```
+### Windows 참고
 
-이 스크립트는 저장소를 `~/.dori/src`에 클론하고, 스킬을 `~/.agents/skills/dori-mode`에 링크하고, Dori mode의 `dori`를 PATH에 올리고, `references/config.example.json`을 `~/.dori/config.json`으로 복사합니다. 그다음 그 파일을 고치십시오. 최소한 `leadPane`(`herdr pane current` 값), `laneWorkspace`, `defaultCwd`가 필요합니다.
+- 토큰은 사용자 환경 변수가 아니라 `~/.dori/<messenger>.env`에 둡니다. `dori`가 그 파일(또는 `DORI_ENV_FILE`의 파일)을 직접 읽습니다. 한 번만 쓰는 셸이라면 위 예시처럼 `$env:DORI_SLACK_TOKEN = "xoxp-..."`로 설정하세요.
+- 하네스는 pane에 명령을 입력하므로 pane마다 셸을 알아보고 거기에 맞게 따옴표를 붙입니다. pwsh, Windows PowerShell 5.1, cmd, Git Bash입니다. `DORI_PANE_SHELL`(`posix`, `pwsh`, `powershell`, `cmd`)로 덮어씁니다.
+- 호스트 가드는 `powershell.exe` 호출 한 번으로 부하, 메모리, 스왑, 디스크를 읽습니다. 부하는 CPU 사용률 곱하기 CPU 수에 프로세서 큐를 더한 값이라 Unix의 1분 평균보다 더 출렁입니다.
+- `Done =` 명령은 `["bun","test"]` 같은 argv 목록이라 같은 줄이 Windows, macOS, Linux에서 다 통합니다.
 
 ## 빠른 시작
 
 herdr 서버를 켠 뒤 하네스를 올립니다.
 
 ```sh
-dori up
+dori-harness up
 # UP lead=w1:p1 duty=w1:p2 loop=w1:p3 hourly=w1:p4 home=~/.dori
 ```
 
 `dori`라는 이름의 herdr 워크스페이스가 열리고, 그 안에 리드(omo 세션이고 시스템 프롬프트에 `prompts/lead.md`가 덧붙습니다)가, 그 아래에 듀티 세션과 듀티 루프, 매시간 루프가 놓입니다. 리드에게 말을 거십시오. 리드는 브리프(목표, 입력, 산출물, 정지 조건, 제약. [examples/brief.md](examples/brief.md) 참고)를 쓰고 레인을 직접 엽니다. 셸에서 열어도 됩니다.
 
 ```sh
-dori start fix-flaky-login --brief examples/brief.md
-# STARTED fix-flaky-login pane=w1:p5 brief=/Users/you/.dori/briefs/fix-flaky-login.md
+dori-harness start fix-flaky-login --brief examples/brief.md
+# STARTED fix-flaky-login pane=w1:p5 brief=~/.dori/briefs/fix-flaky-login.md
 
-dori status
-# lead=w1:p1 duty=w1:p2 home=/Users/you/.dori
+dori-harness status
+# lead=w1:p1 duty=w1:p2 home=~/.dori
 # fix-flaky-login         working  w1:p5    active 0m ago  start: examples/brief.md
 ```
 
 레인 키는 `^[a-z][a-z0-9-]{1,40}$`와 맞아야 하고, 이미 열린 키는 거부됩니다. 레인 안에서 에이전트는 레인 규칙이 건네는 명령으로 보고하고 끝냅니다.
 
 ```sh
-dori report fix-flaky-login --text '재현: 20회 중 1회 실패, 공유 세션 fixture'
-dori report fix-flaky-login --status waiting --text 'WAITING: owner/repo#12 체크 대기'
-dori ready fix-flaky-login --text '원인 수정, 체크 초록' --evidence https://github.com/owner/repo/pull/12
+dori-harness report fix-flaky-login --text '재현: 20회 중 1회 실패, 공유 세션 fixture'
+dori-harness report fix-flaky-login --status waiting --text 'WAITING: owner/repo#12 체크 대기'
+dori-harness ready fix-flaky-login --text '원인 수정, 체크 초록' --evidence https://github.com/owner/repo/pull/12
 # READY fix-flaky-login
 ```
 
 리드는 pane에서 `[READY fix-flaky-login]`을 읽고 게이트를 직접 돌립니다.
 
 ```sh
-dori review owner/repo#12             # head에 고정한 새 omo 리뷰어, 영수증을 씁니다
-dori merge owner/repo#12 --dry-run    # MERGE_OK owner/repo#12 head=<sha> (dry run) 또는 MERGE_REFUSED <이유>
-dori merge owner/repo#12              # gh pr merge --squash --match-head-commit <sha>
-dori done fix-flaky-login             # 레인의 탭을 닫습니다. READY 레인만 닫을 수 있습니다
+dori-harness review owner/repo#12             # head에 고정한 새 omo 리뷰어, 영수증을 씁니다
+dori-harness merge owner/repo#12 --dry-run    # MERGE_OK owner/repo#12 head=<sha> (dry run) 또는 MERGE_REFUSED <이유>
+dori-harness merge owner/repo#12              # gh pr merge --squash --match-head-commit <sha>
+dori-harness done fix-flaky-login             # 레인의 탭을 닫습니다. READY 레인만 닫을 수 있습니다
 ```
 
-`dori send <lead|duty|key|pane> --text '...'`는 pane으로 보내고, 바쁘면 쌓아 둡니다. `--text`를 빼면 표준입력에서 읽습니다. 에이전트가 받는 명령에는 `src/cli.ts`의 전체 경로가 붙고 `DORI_HOME`이 설정되므로, PATH에 있는 `dori`가 어느 쪽이든 상관없습니다.
+`dori-harness send <lead|duty|key|pane> --text '...'`는 pane으로 보내고, 바쁘면 쌓아 둡니다. `--text`를 빼면 표준입력에서 읽습니다. 에이전트가 받는 명령에는 `src/cli.ts`의 전체 경로가 붙고 `DORI_HOME`이 설정되므로, PATH에 있는 `dori`가 어느 쪽이든 상관없습니다.
 
 ## 동작 방식
 
@@ -164,17 +205,17 @@ dori done fix-flaky-login             # 레인의 탭을 닫습니다. READY 레
 
 사용자와 이야기하는 세션은 리드뿐입니다. 리드는 요청을 브리프로 만들고, 레인을 열고, 레인이 보내온 것을 읽고, 머지합니다.
 
-레인은 전용 탭의 에이전트 세션 하나이고, 브리프 하나와 레인 규칙(`prompts/lane-footer.md`)을 덧붙여 시작합니다. 진행은 `dori report`로 보고하고, 마지막은 `dori ready`로 끝냅니다. 증거 링크가 없으면 `dori ready`는 나가지 않습니다. 레인이 한 일은 모두 한 줄이 되어 리드에 도착합니다. `[START]`, `[REPORT]`, `[READY]`, `[LOST]`, `[ESCALATE]`입니다.
+레인은 전용 탭의 에이전트 세션 하나이고, 브리프 하나와 레인 규칙(`prompts/lane-footer.md`)을 덧붙여 시작합니다. 진행은 `dori-harness report`로 보고하고, 마지막은 `dori-harness ready`로 끝냅니다. 증거 링크가 없으면 `dori-harness ready`는 나가지 않습니다. 레인이 한 일은 모두 한 줄이 되어 리드에 도착합니다. `[START]`, `[REPORT]`, `[READY]`, `[LOST]`, `[ESCALATE]`입니다.
 
-듀티 루프는 `dori duty --interval 60`이고, 듀티 세션 옆에서 도는 평범한 프로세스입니다. tick마다 idle이 된 pane에 쌓인 메시지를 풀고, 조용한 레인을 재촉하고, 리드로 올리고, pane이 사라진 레인을 lost로 표시합니다.
+듀티 루프는 `dori-harness duty --interval 60`이고, 듀티 세션 옆에서 도는 평범한 프로세스입니다. tick마다 idle이 된 pane에 쌓인 메시지를 풀고, 조용한 레인을 재촉하고, 리드로 올리고, pane이 사라진 레인을 lost로 표시합니다.
 
-매시간 루프는 `dori loop`입니다. 한 시간에 한 번 백로그를 현실과 맞추고, 놓친 일을 점검하고, 아무 결정도 필요 없는 다음 항목을 시작하고, 열린 질문을 한 번씩 묻고, 보고를 하나 보냅니다. 머지하지 않고, push하지 않고, pane을 닫지 않습니다.
+매시간 루프는 `dori-harness loop`입니다. 한 시간에 한 번 백로그를 현실과 맞추고, 놓친 일을 점검하고, 아무 결정도 필요 없는 다음 항목을 시작하고, 열린 질문을 한 번씩 묻고, 보고를 하나 보냅니다. 머지하지 않고, push하지 않고, pane을 닫지 않습니다.
 
 상태는 `~/.dori`(또는 `$DORI_HOME`) 아래 JSON입니다. `lanes/`, `inbox/`, `briefs/`, `receipts/`가 있고, 매시간 루프용 `backlog/`와 `loop/`, 정지 파일용 `duty/`가 있습니다. 하네스가 더하는 상주 프로세스는 이 두 루프뿐이고, 런타임 의존성은 Bun 하나뿐입니다.
 
 ### 머지 게이트
 
-`dori merge`는 `gh`로 PR의 head SHA를 읽고, 이유를 이름으로 밝혀 거부합니다.
+`dori-harness merge`는 `gh`로 PR의 head SHA를 읽고, 이유를 이름으로 밝혀 거부합니다.
 
 | 거부 | 뜻 |
 |---|---|
@@ -184,7 +225,7 @@ dori done fix-flaky-login             # 레인의 탭을 닫습니다. READY 레
 | `checks_red` | 실패한 체크가 있음 |
 | `checks_all_skipped` | 모든 체크가 건너뛰어져 아무것도 통과하지 못함 |
 
-영수증은 `dori review`만 씁니다. head에 고정한 `prompts/review.md`를 비대화형 omo로 돌리고, `VERDICT:` 줄을 내지 않는 리뷰어는 영수증을 남기지 않습니다. 리뷰 뒤에 push하면 head가 움직이므로 예전 영수증은 효력이 없습니다.
+영수증은 `dori-harness review`만 씁니다. head에 고정한 `prompts/review.md`를 비대화형 omo로 돌리고, `VERDICT:` 줄을 내지 않는 리뷰어는 영수증을 남기지 않습니다. 리뷰 뒤에 push하면 head가 움직이므로 예전 영수증은 효력이 없습니다.
 
 `~/.dori/config.json`의 `hooks.reviewCommand`로 내장 리뷰어를 직접 만든 명령으로 바꿀 수 있습니다. 같은 `VERDICT:` 줄을 내야 합니다.
 
@@ -194,19 +235,19 @@ dori done fix-flaky-login             # 레인의 탭을 닫습니다. READY 레
 
 | 명령 | 하는 일 |
 |---|---|
-| `dori up [--cwd DIR]` | 리드, 듀티, 듀티 루프, 매시간 루프 pane을 엽니다 |
-| `dori start <key> --brief FILE [--cwd DIR]` | 레인을 엽니다. 새 탭, 에이전트 세션, 브리프와 레인 규칙 |
-| `dori report <key> --text T [--status working\|waiting]` | 레인이 진행 상황이나 대기를 기록합니다 |
-| `dori ready <key> --text T --evidence LINK` | 레인이 끝납니다. 증거가 없으면 거부합니다 |
-| `dori review <owner/repo#N> [--model M]` | 그 head에서 새 리뷰어를 돌려 영수증을 씁니다 |
-| `dori merge <owner/repo#N> [--dry-run]` | CLEAR 영수증과 초록 체크를 확인한 뒤 squash 머지 |
-| `dori done <key>` | 리드가 READY 레인을 닫습니다 |
-| `dori status` | 역할과 열린 레인 전부 |
-| `dori duty [--once] \| stop \| resume \| status` | 듀티 루프와 정지 스위치 |
-| `dori loop [--once] \| stop \| resume \| status` | 매시간 루프와 정지 스위치 |
-| `dori backlog add \| list \| decide \| drop \| import` | 매시간 루프가 꺼내는 대기열 |
-| `dori send <target> --text T`와 `dori inbox list\|ack\|resend` | 전달, 대기, 보류된 전달의 처리 |
-| `dori role <lead\|duty> [PANE]` | `dori up`을 쓰지 않았을 때 pane을 등록합니다 |
+| `dori-harness up [--cwd DIR]` | 리드, 듀티, 듀티 루프, 매시간 루프 pane을 엽니다 |
+| `dori-harness start <key> --brief FILE [--cwd DIR]` | 레인을 엽니다. 새 탭, 에이전트 세션, 브리프와 레인 규칙 |
+| `dori-harness report <key> --text T [--status working\|waiting]` | 레인이 진행 상황이나 대기를 기록합니다 |
+| `dori-harness ready <key> --text T --evidence LINK` | 레인이 끝납니다. 증거가 없으면 거부합니다 |
+| `dori-harness review <owner/repo#N> [--model M]` | 그 head에서 새 리뷰어를 돌려 영수증을 씁니다 |
+| `dori-harness merge <owner/repo#N> [--dry-run]` | CLEAR 영수증과 초록 체크를 확인한 뒤 squash 머지 |
+| `dori-harness done <key>` | 리드가 READY 레인을 닫습니다 |
+| `dori-harness status` | 역할과 열린 레인 전부 |
+| `dori-harness duty [--once] \| stop \| resume \| status` | 듀티 루프와 정지 스위치 |
+| `dori-harness loop [--once] \| stop \| resume \| status` | 매시간 루프와 정지 스위치 |
+| `dori-harness backlog add \| list \| decide \| drop \| import` | 매시간 루프가 꺼내는 대기열 |
+| `dori-harness send <target> --text T`와 `dori-harness inbox list\|ack\|resend` | 전달, 대기, 보류된 전달의 처리 |
+| `dori-harness role <lead\|duty> [PANE]` | `dori-harness up`을 쓰지 않았을 때 pane을 등록합니다 |
 
 인자 없이 `bun src/cli.ts`를 실행하면 모든 플래그가 붙은 같은 목록이 나옵니다.
 
@@ -251,14 +292,16 @@ bun run ci          # Biome, tsc, knip, 250줄 래칫, 그다음 두 스위트
 
 두 스위트 모두 모델도 네트워크도 쓰지 않습니다. 하네스는 가짜 herdr과 가짜 `gh`에, Dori mode는 가짜 herdr, git, `gh`에 대고 돕니다. 엔드투엔드 테스트 둘은 진짜 herdr 서버를 띄우고, `herdr`가 PATH에 없으면 스스로 건너뜁니다.
 
+Windows 프로필에는 따로 테스트가 있습니다(Windows 전용): `cd profile; bun test`. `bun scripts/check-paths.ts`는 추적되는 파일에 하드코딩된 사용자 경로나 개인 값이 있으면 실패합니다.
+
 ## 텔레메트리
 
 `dori`는 omo와 같은 방식으로 익명 사용량을 보냅니다. `https://t.omo.dev`로 OTLP/HTTP JSON을 보내고, `~/.dori/telemetry.json`에 둔 무작위 설치 id의 sha256만 내보냅니다. 기계를 떠나는 것은 개수와 고정된 enum입니다. 설치, 일간 활성, 레인 시작, 레인 ready, 리뷰 완료, 머지 판정, 한 시간에 한 번의 듀티 요약입니다. 경로, 저장소 이름, PR 번호, 레인 키, 브리프, 메시지나 그 밖의 텍스트는 보내지 않습니다. `DORI_TELEMETRY=0`으로 끄고(`DO_NOT_TRACK=1`도 됩니다), `DORI_TELEMETRY_ENDPOINT`로 보낼 곳을 바꿉니다. 텔레메트리 때문에 명령이 실패하는 일은 없습니다.
 
 ## 기여
 
-기여자는 리뷰나 머지 전에 [기여자 라이선스 계약](CLA.md)에 한 번 서명합니다. 풀 리퀘스트에 `I have read the CLA Document and I hereby sign the CLA` 라고 댓글을 남기면 됩니다. 게이트, 테스트 명령, 풀 리퀘스트 규칙은 [CONTRIBUTING.md](CONTRIBUTING.md)에 있습니다.
+기여자는 리뷰나 머지 전에 [기여자 라이선스 계약](https://github.com/sisyphuslabs/dori-superagent/blob/main/CLA.md)에 한 번 서명합니다. 풀 리퀘스트에 `I have read the CLA Document and I hereby sign the CLA` 라고 댓글을 남기면 됩니다. 게이트, 테스트 명령, 풀 리퀘스트 규칙은 [CONTRIBUTING.md](CONTRIBUTING.md)에 있습니다.
 
 ## 라이선스
 
-이 프로젝트는 [Sustainable Use License](LICENSE) 1.0으로 제공되고, 서드파티 구성 요소는 각자의 라이선스를 따릅니다. 자기 사업의 내부 사용과 비상업적 사용이나 개인적 사용을 덮습니다. 상업적 사용에는 소유자의 라이선스가 필요합니다. `ba96abf` 이전 커밋은 배포 당시의 MIT 라이선스를 유지하고, 이 변경은 그 커밋부터 적용됩니다. `prompts/`의 프롬프트는 에이전트가 실제로 받는 지시이고, 믿기 전에 다 읽을 수 있을 만큼 짧습니다.
+업스트림 [7ac0ed7](https://github.com/sisyphuslabs/dori-superagent/commit/7ac0ed761dfb6aa0b3a81e8740a29cde5cbd0444) 포트부터 win-dori는 업스트림과 같이 [Sustainable Use License](LICENSE) 1.0을 따르고, 서드파티 구성 요소는 각자의 라이선스를 따릅니다. 개인 사용, 사내 업무용 사용, 무료 비상업적 사용이 허용되며, 상업적 사용에는 소유자인 Sisyphus Labs의 라이선스가 필요합니다. win-dori가 무엇을 바꿨는지는 [NOTICE.md](NOTICE.md)에 있습니다. `fa86ddf`까지의 win-dori 버전은 MIT였고 그대로 MIT입니다. `prompts/`의 프롬프트는 에이전트가 실제로 받는 지시문이고, 믿기 전에 읽어 볼 만큼 짧습니다.
