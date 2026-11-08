@@ -86,3 +86,41 @@ test("a narrow pane that cuts the goal footer short reads STARTUP_OK when the la
   // Another lane's active goal in the same cwd is not this lane's goal.
   expect(await launch("narrow")).toStartWith("STARTUP_NO_GOAL narrow w:p9");
 });
+
+test("a lane gets the launching Dori's DORI_HOME, DORI_CONFIG, DORI_STATE_DIR and DORI_ENV_FILE, and nothing else of its env", async () => {
+  // Given a second Dori whose lead runs with its own folder in the env, and a herdr that records the tab create.
+  const brief = join(state.dir, "brief.md");
+  writeFileSync(brief, "# brief\n");
+  world.screen = "❯ ";
+  const base = depsFor(world, fakeClock(T0), state.dir, { goalMarker: "" });
+  let created: readonly string[] = [];
+  const own = {
+    DORI_HOME: "/b/.dori",
+    DORI_CONFIG: "/b/.dori/config.json",
+    DORI_STATE_DIR: "/b/.dori/state",
+    DORI_ENV_FILE: "/b/.dori/slack.env",
+  };
+  const deps = {
+    ...base,
+    env: { ...base.env, ...own, UNRELATED_SECRET: "x" },
+    run: async (argv: readonly string[]) => {
+      if (argv[0] === "herdr" && argv[1] === "tab" && argv[2] === "create") {
+        created = argv;
+        return {
+          code: 0,
+          out: JSON.stringify({ result: { root_pane: { pane_id: "w:p9" }, tab_id: "w:t9" } }),
+          err: "",
+        };
+      }
+      return base.run(argv);
+    },
+  };
+  // When the lane launches; then its session carries exactly those four as --env flags.
+  await launchLane(deps, { key: "second-lane", title: "t", brief, done: "closed acme/app#3" });
+  const envs = created.flatMap((a, i) => (created[i - 1] === "--env" ? [a] : []));
+  expect(envs.sort()).toEqual(
+    Object.entries(own)
+      .map(([k, v]) => `${k}=${v}`)
+      .sort(),
+  );
+});
