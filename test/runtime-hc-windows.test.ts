@@ -79,3 +79,23 @@ describe("hc on Windows: #70, a terminal whose foreground is its own shell", () 
     expect(childrenScript(900)).toContain("conhost.exe");
   });
 });
+
+describe("hc on Windows: a new PowerShell is typed into only once its prompt is up", () => {
+  test("start reads the screen until PS ...> is at the bottom, then sends", async () => {
+    const { fake, rt, sleeps } = rig({ t1: terminal({ screen: "PS C:\\w> " }) }, {}, win(false));
+    await rt.start(T1, "omo");
+    expect(fake.calls.filter((a) => a.includes("read"))).toHaveLength(1);
+    expect(sleeps).toEqual([]);
+    expect(fake.sent.at(-1)?.text).toBe("omo");
+  });
+
+  test("no prompt within 10 s still sends; off Windows nothing is read first", async () => {
+    const slow = rig({ t1: terminal({ screen: "Loading personal and system profiles..." }) }, {}, win(false));
+    await slow.rt.start(T1, "omo");
+    expect(slow.sleeps).toHaveLength(50);
+    expect(slow.fake.sent.at(-1)?.text).toBe("omo");
+    const posix = rig({ t1: terminal() });
+    await posix.rt.start(T1, "omo");
+    expect(posix.fake.calls.some((a) => a.includes("read"))).toBe(false);
+  });
+});

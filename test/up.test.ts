@@ -1,3 +1,4 @@
+import { quoteArg } from "../src/shell.ts";
 import { describe, expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
@@ -15,7 +16,8 @@ describe("dori up", () => {
       await up(d, "/w");
       return 0;
     });
-    const prompt = (name: string) => `omo --append-system-prompt '${join(root, "prompts", name)}'`;
+    // Quoted for the session's shell as win-dori does (POSIX here): quoteArg leaves a plain path bare.
+    const prompt = (name: string) => `omo --append-system-prompt ${quoteArg(join(root, "prompts", name), "posix")}`;
     const split = (near: string, ...env: string[]) => [
       "pane",
       "split",

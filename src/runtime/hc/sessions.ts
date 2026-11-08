@@ -99,6 +99,26 @@ export async function create(exec: Exec, spec: CreateSpec, shell: string, window
   return { runtime: "hc", id, group: spec.group ?? "dori" };
 }
 
+const PROMPT_POLLS = 50;
+const PROMPT_POLL_MS = 200;
+const PS_PROMPT = /PS [^\n]*>\s*$/;
+
+/**
+ * Windows: a PowerShell that is still starting can drop what is typed, so a new session's screen is read until its
+ * `PS ...>` prompt is at the bottom (10 s at most; a prompt of another shape only costs the wait).
+ */
+export async function waitForPrompt(exec: Exec, id: string, sleep: (ms: number) => Promise<void>): Promise<void> {
+  for (let i = 0; i < PROMPT_POLLS; i++) {
+    try {
+      const text = (await hcCall(exec, ["read", id, "--lines", "0"]))["text"];
+      if (typeof text === "string" && PS_PROMPT.test(text)) return;
+    } catch {
+      // a terminal that cannot be read yet is waited for like one that shows no prompt
+    }
+    await sleep(PROMPT_POLL_MS);
+  }
+}
+
 /** Types the command into the session's shell: a shell reports no status, so there is no `--if` gate. */
 export async function start(exec: Exec, id: string, command: string): Promise<void> {
   await hcCall(exec, ["send", id, "--", command]);

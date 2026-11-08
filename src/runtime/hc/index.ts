@@ -16,7 +16,7 @@ import type {
 import { type BelowShell, processBelowShell } from "./below-shell.ts";
 import { deliver, keys, read, typeIntoShell } from "./deliver.ts";
 import { probe } from "./probe.ts";
-import { close, create, list, selfRef, start } from "./sessions.ts";
+import { close, create, list, selfRef, start, waitForPrompt } from "./sessions.ts";
 
 export type HcRuntimeOptions = {
   readonly env?: Readonly<Record<string, string | undefined>>;
@@ -63,8 +63,14 @@ export class HcRuntime implements SessionRuntime {
     return create(this.exec, spec, this.windows ? windowsShell() : this.env["SHELL"] || "sh", this.windows);
   }
 
-  start(ref: SessionRef, command: string): Promise<void> {
-    return start(this.exec, ref.id, command);
+  /** Windows: until the new session's PowerShell shows its prompt. */
+  async ready(ref: SessionRef): Promise<void> {
+    if (this.windows) await waitForPrompt(this.exec, ref.id, this.sleep);
+  }
+
+  async start(ref: SessionRef, command: string): Promise<void> {
+    await this.ready(ref);
+    await start(this.exec, ref.id, command);
   }
 
   list(filter?: { readonly group?: string }): Promise<readonly SessionInfo[]> {
