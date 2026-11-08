@@ -6,7 +6,9 @@
 
 # win-dori
 
-Dori 모드는 코딩 에이전트 세션 하나를 늘 켜져 있는 메신저 에이전트로 바꿉니다. 사용자는 텔레그램이나 디스코드에서 봇 하나와 이야기합니다. Dori는 일마다 herdr 탭에 에이전트 세션을 따로 띄워 맡기고, 자기가 띄운 세션을 모두 기억하며, 일이 정말 끝났을 때만 닫습니다. PR이 머지되고, 이슈가 닫히고, 버전이 배포된 다음에요.
+> **win-dori는 [sisyphuslabs/dori-superagent](https://github.com/sisyphuslabs/dori-superagent)의 Windows 이식판입니다.** upstream 커밋 [181df3e](https://github.com/sisyphuslabs/dori-superagent/commit/181df3e)를 기준으로 하고, 동작과 기본값은 upstream을 따릅니다. 여기서 더한 것은 Windows에 필요한 부분입니다. PowerShell 설치, pane 셸 인식, 자동 시작과 Slack 리스너가 들어 있는 Windows 프로필이에요. Dori 모드와 하네스의 공은 upstream 작성자들에게 있고, Windows 부분의 버그는 저희 몫입니다. 라이선스에는 원저작권 표시를 그대로 두었습니다.
+
+Dori 모드는 코딩 에이전트 세션 하나를 늘 켜져 있는 메신저 에이전트로 바꿉니다. 사용자는 슬랙, 텔레그램, 디스코드 중 하나에서 봇 하나와 이야기합니다. Dori는 일마다 herdr 탭에 에이전트 세션을 따로 띄워 맡기고, 자기가 띄운 세션을 모두 기억하며, 일이 정말 끝났을 때만 닫습니다. PR이 머지되고, 이슈가 닫히고, 버전이 배포된 다음에요.
 
 스킬(`skills/dori-mode/SKILL.md`와 references)과 bun + TypeScript로 만든 작은 CLI `dori`로 구성됩니다. 아직 실험 단계라 거친 부분이 남아 있어요.
 
@@ -359,7 +361,7 @@ CLI에는 Dori에게 필요한 메신저 기능도 들어 있습니다. `scripts
 
 ## 테스트
 
-CI는 없습니다. 테스트는 로컬에서 돌립니다.
+main 푸시와 PR마다 GitHub Actions CI(Windows, Ubuntu)가 가드, 타입 검사, 테스트를 돌립니다. 로컬에서는 이렇게 돌립니다.
 
 ```sh
 cd skills/dori-mode/scripts

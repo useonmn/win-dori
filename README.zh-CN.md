@@ -6,7 +6,9 @@
 
 # win-dori
 
-Dori 模式把一个编程智能体会话变成常驻的消息智能体。你只需要在 Telegram 或 Discord 上和一个机器人对话。Dori 把每件事交给 herdr 标签页里单独启动的智能体会话，记住自己启动过的每个会话，只有在工作真正完成后才关闭它:PR 已合并、issue 已关闭、版本已发布。
+> **win-dori 是 [sisyphuslabs/dori-superagent](https://github.com/sisyphuslabs/dori-superagent) 的 Windows 移植版。** 它基于上游提交 [181df3e](https://github.com/sisyphuslabs/dori-superagent/commit/181df3e),行为和默认值与上游一致。这里新增的是 Windows 需要的部分:PowerShell 安装、识别 pane 的 shell,以及带开机自启和 Slack 监听器的 Windows 配置。Dori 模式和 harness 的功劳属于上游作者,Windows 部分的 bug 由我们负责。许可证保留了原始版权声明。
+
+Dori 模式把一个编程智能体会话变成常驻的消息智能体。你只需要在 Slack、Telegram 或 Discord 上和一个机器人对话。Dori 把每件事交给 herdr 标签页里单独启动的智能体会话，记住自己启动过的每个会话，只有在工作真正完成后才关闭它:PR 已合并、issue 已关闭、版本已发布。
 
 它由一个技能(`skills/dori-mode/SKILL.md` 和 references)以及一个用 bun + TypeScript 写的小 CLI `dori` 组成。目前还是实验版本，会有不完善的地方。
 
@@ -34,7 +36,7 @@ curl -fsSL https://raw.githubusercontent.com/useonmn/win-dori/main/install.sh | 
 
 ## 超级代理 harness
 
-本仓库的根目录带着 [sisyphuslabs/dori-superagent](https://github.com/sisyphuslabs/dori-superagent) 的 harness，默认行为和功能都与上游一致，只改了 Windows 需要的部分。它是一个主动式、多会话的编程 Agent harness，跑在 [herdr](https://github.com/herdrdev/herdr) 和 [omo](https://github.com/code-yeongyu/oh-my-openagent) 之上，和 Dori 模式彼此独立。
+本仓库的根目录带着 [sisyphuslabs/dori-superagent](https://github.com/sisyphuslabs/dori-superagent) 的 harness，默认行为和功能都与上游一致，只改了 Windows 需要的部分。它是一个主动式、多会话的编程 Agent harness，跑在 [herdr](https://github.com/herdrdev/herdr) 和 [omo](https://github.com/code-yeongyu/oh-my-openagent) 之上，和 Dori 模式彼此独立。本节文字取自上游 README,所以"我们"指的是上游团队。
 
 和你对话的只有一个 lead 会话。每个任务是一条 lane：一个独立的 omo 会话，开在自己的 herdr 标签页里，从一份写好的任务简报（brief）启动，以一条必须附带证据的 READY 收尾。duty 循环负责催没动静的 lane、向 lead 上报，并把发给忙碌窗格（pane）的消息先存起来，等它能读了再送。合并要过一道门禁：精确 head 上的 CLEAR 评审回执，加上全绿的检查项。
 
@@ -357,7 +359,7 @@ Dori 在 Slack 上发的每条消息，不管是哪个函数发出的，都会�
 
 ## 测试
 
-没有 CI,测试在本地运行:
+每次推送到 main 和每个 PR 都会运行 GitHub Actions CI(Windows、Ubuntu),检查 guard、类型和测试。在本地这样运行:
 
 ```sh
 cd skills/dori-mode/scripts
