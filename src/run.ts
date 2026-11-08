@@ -26,7 +26,7 @@ export const realSys: CommandSys = {
     }
   },
   exists: existsSync,
-  cmdExe: win32.join(process.env.SystemRoot ?? "C:\\Windows", "System32", "cmd.exe"),
+  cmdExe: win32.join(process.env["SystemRoot"] ?? "C:\\Windows", "System32", "cmd.exe"),
   execPath: process.execPath,
 };
 
@@ -43,7 +43,10 @@ const SAFE_BARE = /^[A-Za-z0-9#$*+\-./:?@\\_]$/;
  * substring of %cd%) so `%VAR%` cannot expand. Inside quotes, `& | < > ^ ( )` are literal, so no ^-escaping is needed.
  */
 export const batArg = (arg: string): string => {
-  const quote = arg === "" || arg.endsWith("\\") || [...arg].some((c) => (c.charCodeAt(0) < 128 ? !SAFE_BARE.test(c) : /\p{Cc}/u.test(c)));
+  const quote =
+    arg === "" ||
+    arg.endsWith("\\") ||
+    [...arg].some((c) => (c.charCodeAt(0) < 128 ? !SAFE_BARE.test(c) : /\p{Cc}/u.test(c)));
   let s = "";
   let slashes = 0;
   for (const c of arg) {
@@ -61,11 +64,16 @@ export const batArg = (arg: string): string => {
 };
 
 const cmdLine = (script: string, args: readonly string[], sys: CommandSys): Resolved => {
-  if (/["%]/.test(script) || script.endsWith("\\")) return { refused: `cannot run ${script} safely through cmd.exe: its path contains " or %` };
+  if (/["%]/.test(script) || script.endsWith("\\"))
+    return { refused: `cannot run ${script} safely through cmd.exe: its path contains " or %` };
   const bad = args.findIndex((a) => /[\r\n\0]/.test(a));
-  if (bad >= 0) return { refused: `argument ${bad + 1} for ${baseName(script)} contains a newline or NUL, which cmd.exe cannot pass to a .bat/.cmd safely` };
+  if (bad >= 0)
+    return {
+      refused: `argument ${bad + 1} for ${baseName(script)} contains a newline or NUL, which cmd.exe cannot pass to a .bat/.cmd safely`,
+    };
   const line = `""${script}"${args.map((a) => ` ${batArg(a)}`).join("")}"`;
-  if (line.length > CMD_MAX) return { refused: `command line for ${baseName(script)} exceeds cmd.exe's ${CMD_MAX} character limit` };
+  if (line.length > CMD_MAX)
+    return { refused: `command line for ${baseName(script)} exceeds cmd.exe's ${CMD_MAX} character limit` };
   return { argv: [sys.cmdExe, "/d", "/e:ON", "/v:OFF", "/s", "/c", line], verbatim: true };
 };
 
@@ -89,7 +97,10 @@ export const shimTarget = (file: string, text: string, sys: CommandSys): readonl
   const tokens = [...head.matchAll(/"([^"]*)"|(\S+)/g)].map((m) => m[1] ?? m[2] ?? "");
   const expand = (token: string): string | null => {
     let s = token;
-    for (let i = 0; i < 4 && s.includes("%"); i++) s = s.replace(/%~dp0|%dp0%|%(\w+)%/gi, (all, v?: string) => (v === undefined ? dir : (sets.get(v.toLowerCase()) ?? all)));
+    for (let i = 0; i < 4 && s.includes("%"); i++)
+      s = s.replace(/%~dp0|%dp0%|%(\w+)%/gi, (all, v?: string) =>
+        v === undefined ? dir : (sets.get(v.toLowerCase()) ?? all),
+      );
     if (s.includes("%")) return null;
     return /[\\/]/.test(s) ? win32.normalize(s) : s;
   };

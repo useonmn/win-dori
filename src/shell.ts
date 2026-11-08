@@ -1,6 +1,6 @@
-// Shell-aware command lines for herdr panes; ported from windori's launch.ts.
+// Shell-aware command lines for the sessions dori types into; ported from windori's launch.ts.
 
-import type { Exec } from "./herdr.ts";
+import type { SessionRef, SessionRuntime } from "./runtime/types.ts";
 
 export type PaneShell = "posix" | "pwsh" | "powershell" | "cmd";
 
@@ -44,7 +44,9 @@ const encodedCommand = (script: string): string => Buffer.from(script, "utf16le"
 // expression that stays on one line.
 const psArg = (s: string): string => {
   if (!/[\r\n]/.test(s)) return psLiteral(s);
-  const parts = s.split(/(\r\n|\r|\n)/).map((p, i) => (i % 2 ? `"${p.replace("\r", "`r").replace("\n", "`n")}"` : psLiteral(p)));
+  const parts = s
+    .split(/(\r\n|\r|\n)/)
+    .map((p, i) => (i % 2 ? `"${p.replace("\r", "`r").replace("\n", "`n")}"` : psLiteral(p)));
   return `(${parts.join("+")})`;
 };
 
@@ -101,45 +103,35 @@ export const shellFromProcess = (name: string): PaneShell | undefined => {
   return /^(bash|sh|zsh|dash|fish)$/.test(n) ? "posix" : undefined;
 };
 
-type ProcessInfo = {
-  readonly result?: {
-    readonly process_info?: {
-      readonly foreground_processes?: readonly { readonly name?: string; readonly argv0?: string; readonly argv?: readonly string[] }[];
-    };
-  };
+/** The shell assumed when a session's own cannot be read: DORI_PANE_SHELL, else pwsh on Windows, else POSIX. */
+export const defaultShell = (env: Readonly<Record<string, string | undefined>> = process.env, windows = IS_WINDOWS) => {
+  const forced = env["DORI_PANE_SHELL"];
+  if (forced) return parseShell(forced);
+  return windows ? "pwsh" : "posix";
 };
 
-const probe = async (exec: Exec, pane: string): Promise<PaneShell | undefined> => {
+/**
+ * The shell of a session the harness just created, read from its foreground: on Windows the runtime's default shell
+ * (herdr's, or the PowerShell an hc session runs) need not be the one this CLI runs in. DORI_PANE_SHELL wins.
+ */
+export const sessionShell = async (
+  rt: SessionRuntime,
+  ref: SessionRef,
+  fallback: PaneShell,
+  windows = IS_WINDOWS,
+): Promise<PaneShell> => {
+  const forced = process.env["DORI_PANE_SHELL"];
+  if (forced) return parseShell(forced);
+  if (!windows) return fallback;
   try {
-    const session = process.env["DORI_HERDR_SESSION"];
-    const r = await exec("herdr", [...(session ? ["--session", session] : []), "pane", "process-info", "--pane", pane]);
-    if (r.code !== 0) return undefined;
-    const procs = (JSON.parse(r.stdout) as ProcessInfo).result?.process_info?.foreground_processes ?? [];
-    for (const p of procs) {
-      for (const name of [p.name, p.argv0, p.argv?.[0]]) {
+    for (const p of (await rt.probe(ref)).foreground ?? []) {
+      for (const name of [p.name, p.argv[0]]) {
         const found = name ? shellFromProcess(name) : undefined;
         if (found) return found;
       }
     }
-  } catch {}
-  return undefined;
-};
-
-/**
- * The shell the harness should assume for the panes it types into. `DORI_PANE_SHELL` wins;
- * otherwise the pane this CLI runs in is asked first, then the platform default.
- */
-export const resolveShell = async (exec: Exec): Promise<PaneShell> => {
-  const forced = process.env["DORI_PANE_SHELL"];
-  if (forced) return parseShell(forced);
-  if (!IS_WINDOWS) return "posix";
-  const here = process.env["HERDR_PANE_ID"];
-  return (here ? await probe(exec, here) : undefined) ?? "pwsh";
-};
-
-/** The shell of a pane the harness just created: on Windows herdr's default shell need not be the one this CLI runs in. */
-export const paneShell = async (exec: Exec, pane: string, fallback: PaneShell): Promise<PaneShell> => {
-  const forced = process.env["DORI_PANE_SHELL"];
-  if (forced) return parseShell(forced);
-  return IS_WINDOWS ? ((await probe(exec, pane)) ?? fallback) : fallback;
+  } catch {
+    // an unreadable session keeps the fallback
+  }
+  return fallback;
 };

@@ -90,6 +90,8 @@ export const pidAlive = (pid: number, windows = IS_WINDOWS): boolean => {
     return windows && (e as NodeJS.ErrnoException).code === "EPERM";
   }
   if (windows) return true;
-  const stat = Bun.spawnSync(["ps", "-o", "stat=", "-p", String(pid)]).stdout.toString().trim();
+  const stat = Bun.spawnSync(["ps", "-o", "stat=", "-p", String(pid)])
+    .stdout.toString()
+    .trim();
   return stat !== "" && !stat.startsWith("Z");
 };

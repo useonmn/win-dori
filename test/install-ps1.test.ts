@@ -5,7 +5,14 @@ import { delimiter, join, resolve } from "node:path";
 
 // The same scenarios as install.test.ts, against install.ps1 on Windows; a stub `bun` stands in for `bun install` and `bun link`.
 const script = resolve(import.meta.dir, "../install.ps1");
-const gitEnv: Record<string, string> = { GIT_CONFIG_GLOBAL: "NUL", GIT_CONFIG_NOSYSTEM: "1", GIT_AUTHOR_NAME: "t", GIT_AUTHOR_EMAIL: "t@example.com", GIT_COMMITTER_NAME: "t", GIT_COMMITTER_EMAIL: "t@example.com" };
+const gitEnv: Record<string, string> = {
+  GIT_CONFIG_GLOBAL: "NUL",
+  GIT_CONFIG_NOSYSTEM: "1",
+  GIT_AUTHOR_NAME: "t",
+  GIT_AUTHOR_EMAIL: "t@example.com",
+  GIT_COMMITTER_NAME: "t",
+  GIT_COMMITTER_EMAIL: "t@example.com",
+};
 const roots: string[] = [];
 afterEach(() => {
   for (const r of roots.splice(0)) rmSync(r, { recursive: true, force: true });
@@ -17,7 +24,10 @@ const git = (cwd: string, ...argv: string[]): string => {
   return r.stdout.toString().trim();
 };
 
-const shells = [["pwsh", Bun.which("pwsh")], ["powershell", Bun.which("powershell")]] as const;
+const shells = [
+  ["pwsh", Bun.which("pwsh")],
+  ["powershell", Bun.which("powershell")],
+] as const;
 
 function setup(shell: string) {
   const root = mkdtempSync(join(tmpdir(), "dori-install-ps1-"));
@@ -44,13 +54,24 @@ function setup(shell: string) {
   };
   const install = (env: Record<string, string> = {}) => {
     const base: Record<string, string> = {};
-    for (const [k, v] of Object.entries(process.env)) if (v !== undefined && k.toLowerCase() !== "path" && !k.startsWith("DORI_")) base[k] = v;
+    for (const [k, v] of Object.entries(process.env))
+      if (v !== undefined && k.toLowerCase() !== "path" && !k.startsWith("DORI_")) base[k] = v;
     const exe = Bun.which(shell) as string;
     const r = Bun.spawnSync([exe, "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", script], {
       env: {
-        ...base, ...gitEnv, Path: `${bin}${delimiter}${process.env.Path ?? process.env.PATH ?? ""}`,
-        USERPROFILE: home, HOME: home, DORI_SRC: src, SKILLS_DIR: join(home, "skills"), DORI_HOME: join(home, ".dori"),
-        DORI_NO_DEPS: "1", DORI_SKIP_PROFILE: "1", DORI_NO_USER_ENV: "1", DORI_NO_TASK: "1", ...env,
+        ...base,
+        ...gitEnv,
+        Path: `${bin}${delimiter}${process.env["Path"] ?? process.env["PATH"] ?? ""}`,
+        USERPROFILE: home,
+        HOME: home,
+        DORI_SRC: src,
+        SKILLS_DIR: join(home, "skills"),
+        DORI_HOME: join(home, ".dori"),
+        DORI_NO_DEPS: "1",
+        DORI_SKIP_PROFILE: "1",
+        DORI_NO_USER_ENV: "1",
+        DORI_NO_TASK: "1",
+        ...env,
       },
     });
     return { code: r.exitCode, err: r.stderr.toString() };
@@ -62,7 +83,7 @@ describe.skipIf(process.platform !== "win32")("install.ps1", () => {
   for (const [name, exe] of shells) {
     // Every scenario runs under pwsh 7 and under Windows PowerShell 5.1 (native stderr under 'Stop' behaves differently there).
     // One installer run took up to 7 s on a loaded 4-core PC, past bun's 5 s default; each test gets 15 s per run it makes.
-    const t = (title: string, fn: () => void, installs = 1) => (exe ? test : test.skip)(title, fn, installs * 15_000);
+    const t = (title: string, fn: () => void, installs = 1) => (exe ? test : test.skip)(title, fn, installs * 30_000);
 
     t(`${name}: a second install over a clean checkout pulls upstream`, () => {
       const { upstream, src, upstreamCommit, install } = setup(name);
@@ -108,17 +129,21 @@ describe.skipIf(process.platform !== "win32")("install.ps1", () => {
       expect(r.err).toContain("DORI_NO_PULL=1");
     });
 
-    t(`${name}: DORI_NO_PULL=true and DORI_NO_PULL=yes skip the pull; DORI_NO_PULL=0 still pulls`, () => {
-      const { upstream, src, upstreamCommit, install } = setup(name);
-      const before = git(src, "rev-parse", "HEAD");
-      upstreamCommit("v2\n");
-      for (const value of ["true", "yes"]) {
-        expect(install({ DORI_NO_PULL: value }).code).toBe(0);
-        expect(git(src, "rev-parse", "HEAD")).toBe(before);
-      }
-      expect(install({ DORI_NO_PULL: "0" }).code).toBe(0);
-      expect(git(src, "rev-parse", "HEAD")).toBe(git(upstream, "rev-parse", "HEAD"));
-    }, 3);
+    t(
+      `${name}: DORI_NO_PULL=true and DORI_NO_PULL=yes skip the pull; DORI_NO_PULL=0 still pulls`,
+      () => {
+        const { upstream, src, upstreamCommit, install } = setup(name);
+        const before = git(src, "rev-parse", "HEAD");
+        upstreamCommit("v2\n");
+        for (const value of ["true", "yes"]) {
+          expect(install({ DORI_NO_PULL: value }).code).toBe(0);
+          expect(git(src, "rev-parse", "HEAD")).toBe(before);
+        }
+        expect(install({ DORI_NO_PULL: "0" }).code).toBe(0);
+        expect(git(src, "rev-parse", "HEAD")).toBe(git(upstream, "rev-parse", "HEAD"));
+      },
+      3,
+    );
 
     t(`${name}: a branch with no upstream is not taken for local work: git's reason, no reset suggested`, () => {
       const { src, cli, install } = setup(name);

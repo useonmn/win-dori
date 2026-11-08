@@ -74,8 +74,7 @@ function startSupervisor(script: string, lockName: string, overrides: Record<str
     let buf = "";
     for await (const chunk of proc.stdout as ReadableStream<Uint8Array>) {
       buf += dec.decode(chunk, { stream: true });
-      let i: number;
-      while ((i = buf.indexOf("\n")) >= 0) {
+      for (let i = buf.indexOf("\n"); i >= 0; i = buf.indexOf("\n")) {
         lines.push(buf.slice(0, i).replace(/\r$/, ""));
         buf = buf.slice(i + 1);
       }
@@ -108,7 +107,7 @@ function startSupervisor(script: string, lockName: string, overrides: Record<str
 test("by default runs dori-inbound.ts beside it and locks under the home folder's .dori/state", async () => {
   const home = join(dir, "home");
   const events = join(dir, "connect-only.jsonl");
-  writeFileSync(events, JSON.stringify({ fake: "connect" }) + "\n");
+  writeFileSync(events, `${JSON.stringify({ fake: "connect" })}\n`);
   const s = startSupervisor("", "unused.lock", {
     DORI_INBOUND_SCRIPT: undefined,
     DORI_INBOUND_LOCK: undefined,
@@ -129,7 +128,7 @@ test("a hard-killed supervisor takes its listener down with it (the stdin pipe c
   const locks = join(dir, "locks-wd");
   mkdirSync(locks, { recursive: true });
   const events = join(dir, "wait-forever.jsonl");
-  writeFileSync(events, JSON.stringify({ fake: "wait", file: join(dir, "gate-never") }) + "\n");
+  writeFileSync(events, `${JSON.stringify({ fake: "wait", file: join(dir, "gate-never") })}\n`);
   const s = startSupervisor("", "wd.lock", {
     DORI_INBOUND_SCRIPT: undefined,
     USERPROFILE: home,

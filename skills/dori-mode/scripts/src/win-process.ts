@@ -1,6 +1,11 @@
 import { dlopen, FFIType, ptr } from "bun:ffi";
 
-export type WinProc = { readonly pid: number; readonly ppid: number; readonly cmd: string; readonly startedAt?: number };
+export type WinProc = {
+  readonly pid: number;
+  readonly ppid: number;
+  readonly cmd: string;
+  readonly startedAt?: number;
+};
 
 /** One PowerShell call listing every process with its parent, command line, and UTC start time. */
 export const WIN_PROC_SCRIPT = [
@@ -10,7 +15,12 @@ export const WIN_PROC_SCRIPT = [
   "| ConvertTo-Json -Compress",
 ].join(" ");
 
-type CimRow = { readonly ProcessId?: number; readonly ParentProcessId?: number; readonly CommandLine?: string | null; readonly CreationDate?: string | null };
+type CimRow = {
+  readonly ProcessId?: number;
+  readonly ParentProcessId?: number;
+  readonly CommandLine?: string | null;
+  readonly CreationDate?: string | null;
+};
 
 export const parseWin32Processes = (json: string): WinProc[] => {
   let parsed: unknown;
@@ -22,7 +32,14 @@ export const parseWin32Processes = (json: string): WinProc[] => {
   return (Array.isArray(parsed) ? parsed : [parsed]).flatMap((r: CimRow) => {
     if (typeof r?.ProcessId !== "number") return [];
     const at = r.CreationDate ? Date.parse(r.CreationDate) : Number.NaN;
-    return [{ pid: r.ProcessId, ppid: r.ParentProcessId ?? 0, cmd: r.CommandLine ?? "", ...(Number.isNaN(at) ? {} : { startedAt: at }) }];
+    return [
+      {
+        pid: r.ProcessId,
+        ppid: r.ParentProcessId ?? 0,
+        cmd: r.CommandLine ?? "",
+        ...(Number.isNaN(at) ? {} : { startedAt: at }),
+      },
+    ];
   });
 };
 
@@ -98,10 +115,18 @@ let api: ReturnType<typeof load> | undefined;
 const load = () => {
   const k32 = dlopen("kernel32.dll", {
     OpenProcess: { args: [FFIType.u32, FFIType.i32, FFIType.u32], returns: FFIType.ptr },
-    ReadProcessMemory: { args: [FFIType.ptr, FFIType.u64, FFIType.ptr, FFIType.u64, FFIType.ptr], returns: FFIType.i32 },
+    ReadProcessMemory: {
+      args: [FFIType.ptr, FFIType.u64, FFIType.ptr, FFIType.u64, FFIType.ptr],
+      returns: FFIType.i32,
+    },
     CloseHandle: { args: [FFIType.ptr], returns: FFIType.i32 },
   });
-  const nt = dlopen("ntdll.dll", { NtQueryInformationProcess: { args: [FFIType.ptr, FFIType.u32, FFIType.ptr, FFIType.u32, FFIType.ptr], returns: FFIType.i32 } });
+  const nt = dlopen("ntdll.dll", {
+    NtQueryInformationProcess: {
+      args: [FFIType.ptr, FFIType.u32, FFIType.ptr, FFIType.u32, FFIType.ptr],
+      returns: FFIType.i32,
+    },
+  });
   return { ...k32.symbols, ...nt.symbols };
 };
 
@@ -120,7 +145,9 @@ export const readProcessEnv = (pid: number): Record<string, string> | undefined 
       const read = (addr: bigint, size: number): Uint8Array | undefined => {
         const buf = new Uint8Array(size);
         const got = new BigUint64Array(1);
-        return a.ReadProcessMemory(h, addr, ptr(buf), BigInt(size), ptr(got)) && got[0] === BigInt(size) ? buf : undefined;
+        return a.ReadProcessMemory(h, addr, ptr(buf), BigInt(size), ptr(got)) && got[0] === BigInt(size)
+          ? buf
+          : undefined;
       };
       const pbi = new Uint8Array(PBI_SIZE);
       const len = new Uint32Array(1);

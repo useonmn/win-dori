@@ -1,5 +1,15 @@
 import { randomUUID } from "node:crypto";
-import { closeSync, existsSync, fstatSync, mkdirSync, openSync, readFileSync, readSync, realpathSync, writeSync } from "node:fs";
+import {
+  closeSync,
+  existsSync,
+  fstatSync,
+  mkdirSync,
+  openSync,
+  readFileSync,
+  readSync,
+  realpathSync,
+  writeSync,
+} from "node:fs";
 import { isAbsolute, join, resolve } from "node:path";
 
 import { IS_WINDOWS, samePath } from "./paths.ts";
@@ -17,7 +27,8 @@ export type Lesson = {
   readonly evidence: string;
   readonly outcome: LessonOutcome;
 };
-export type LessonInput = Pick<Lesson, "lane" | "rule" | "evidence"> & ({ readonly cwd: string; readonly scope?: undefined } | { readonly scope: "global"; readonly cwd?: undefined });
+export type LessonInput = Pick<Lesson, "lane" | "rule" | "evidence"> &
+  ({ readonly cwd: string; readonly scope?: undefined } | { readonly scope: "global"; readonly cwd?: undefined });
 export type LessonRead = { readonly lessons: Lesson[]; readonly problems: string[] };
 export class LessonError extends Error {}
 
@@ -25,6 +36,7 @@ export const isLessonOutcome = (value: unknown): value is LessonOutcome =>
   value === "pending" || value === "helped" || value === "no-effect" || value === "harmful" || value === "encoded";
 
 const singleLine = (value: unknown, max: number): value is string =>
+  // biome-ignore lint/suspicious/noControlCharactersInRegex: the pattern deliberately matches control characters to reject or strip them
   typeof value === "string" && value.trim().length > 0 && value.length <= max && !/[\x00-\x1f\x7f]/.test(value);
 
 export const REPO_LESSON_CAP = 8;
@@ -33,9 +45,15 @@ export const GLOBAL_LESSON_CAP = 4;
 const FIELDS = ["id", "at", "lane", "cwd", "scope", "rule", "evidence", "outcome"] as const;
 const IMMUTABLE = ["at", "lane", "cwd", "scope", "rule", "evidence"] as const;
 const fieldChecks: Record<(typeof FIELDS)[number], [(value: unknown) => boolean, string]> = {
-  id: [(v) => typeof v === "string" && /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/.test(v), "must be a lowercase UUID as randomUUID writes it"],
+  id: [
+    (v) => typeof v === "string" && /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/.test(v),
+    "must be a lowercase UUID as randomUUID writes it",
+  ],
   // Only the form toISOString writes: Date.parse also takes "0" or an RFC 2822 date, which must not reach a brief.
-  at: [(v) => typeof v === "string" && Number.isFinite(Date.parse(v)) && new Date(v).toISOString() === v, "must be an ISO time as toISOString writes it"],
+  at: [
+    (v) => typeof v === "string" && Number.isFinite(Date.parse(v)) && new Date(v).toISOString() === v,
+    "must be an ISO time as toISOString writes it",
+  ],
   lane: [(v) => typeof v === "string" && LANE_KEY.test(v), `must match ${LANE_KEY}`],
   cwd: [(v) => singleLine(v, 4096) && isAbsolute(v), "must be an absolute single-line path"],
   scope: [(v) => v === "global", 'must be "global" or absent'],
@@ -45,12 +63,13 @@ const fieldChecks: Record<(typeof FIELDS)[number], [(value: unknown) => boolean,
 };
 
 const parseLesson = (value: unknown): Lesson => {
-  if (typeof value !== "object" || value === null || Array.isArray(value)) throw new LessonError("lesson record must be a JSON object");
+  if (typeof value !== "object" || value === null || Array.isArray(value))
+    throw new LessonError("lesson record must be a JSON object");
   const record = value as Record<string, unknown>;
   const unknown = Object.keys(record).find((name) => !(FIELDS as readonly string[]).includes(name));
   if (unknown !== undefined) throw new LessonError(`unknown lesson field "${unknown}"`);
   // A repo lesson has a cwd and no scope; a global lesson has scope "global" and no cwd.
-  const global = record.scope === "global";
+  const global = record["scope"] === "global";
   if (global && "cwd" in record) throw new LessonError('a global lesson has no field "cwd"');
   const absent = global ? "cwd" : "scope";
   for (const name of FIELDS) {
@@ -72,7 +91,10 @@ export class Lessons {
   readonly path: string;
 
   // Windows paths are case-insensitive and a cwd may arrive as C:/a or c:\a, so scopes compare by samePath there.
-  constructor(readonly stateDir: string, private readonly windows = IS_WINDOWS) {
+  constructor(
+    readonly stateDir: string,
+    private readonly windows = IS_WINDOWS,
+  ) {
     this.path = join(stateDir, "lessons.jsonl");
   }
 
@@ -87,7 +109,8 @@ export class Lessons {
         const lesson = parseLesson(JSON.parse(line));
         const previous = latest.get(lesson.id);
         const changed = previous && IMMUTABLE.find((name) => previous[name] !== lesson[name]);
-        if (changed) throw new LessonError(`lesson field "${changed}" changed for ${lesson.id}; it is fixed once recorded`);
+        if (changed)
+          throw new LessonError(`lesson field "${changed}" changed for ${lesson.id}; it is fixed once recorded`);
         latest.set(lesson.id, lesson);
       } catch (error) {
         if (!(error instanceof SyntaxError || error instanceof LessonError)) throw error;
@@ -95,15 +118,29 @@ export class Lessons {
       }
     }
     const target = cwd === undefined ? undefined : scope(cwd);
-    const lessons = [...latest.values()].reverse()
-      .filter((lesson) => target === undefined || lesson.scope === "global" || (this.windows ? lesson.cwd !== undefined && samePath(lesson.cwd, target, true) : lesson.cwd === target))
+    const lessons = [...latest.values()]
+      .reverse()
+      .filter(
+        (lesson) =>
+          target === undefined ||
+          lesson.scope === "global" ||
+          (this.windows ? lesson.cwd !== undefined && samePath(lesson.cwd, target, true) : lesson.cwd === target),
+      )
       .sort((a, b) => Date.parse(b.at) - Date.parse(a.at));
     return { lessons, problems };
   }
 
   add(input: LessonInput, now: number): Lesson {
     const where = input.scope === "global" ? { scope: "global" } : { cwd: scope(input.cwd) };
-    const lesson = parseLesson({ lane: input.lane, rule: input.rule, evidence: input.evidence, ...where, id: randomUUID(), at: new Date(now).toISOString(), outcome: "pending" });
+    const lesson = parseLesson({
+      lane: input.lane,
+      rule: input.rule,
+      evidence: input.evidence,
+      ...where,
+      id: randomUUID(),
+      at: new Date(now).toISOString(),
+      outcome: "pending",
+    });
     this.append(lesson);
     return lesson;
   }
@@ -145,10 +182,17 @@ export class Lessons {
   }
 }
 
-const section = (heading: string, lessons: readonly Lesson[]): string => lessons.length
-  ? `${heading}\n${lessons.map((lesson) => `- [${lesson.outcome}; ${lesson.lane}] ${lesson.rule}`).join("\n")}\n\n`
-  : "";
+const section = (heading: string, lessons: readonly Lesson[]): string =>
+  lessons.length
+    ? `${heading}\n${lessons.map((lesson) => `- [${lesson.outcome}; ${lesson.lane}] ${lesson.rule}`).join("\n")}\n\n`
+    : "";
 
 export const renderLessons = (lessons: readonly Lesson[]): string =>
-  section("## Lessons for every lane", lessons.filter((lesson) => lesson.scope === "global")) +
-  section("## Lessons for this repo", lessons.filter((lesson) => lesson.scope !== "global"));
+  section(
+    "## Lessons for every lane",
+    lessons.filter((lesson) => lesson.scope === "global"),
+  ) +
+  section(
+    "## Lessons for this repo",
+    lessons.filter((lesson) => lesson.scope !== "global"),
+  );

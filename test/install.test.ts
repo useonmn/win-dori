@@ -1,4 +1,4 @@
-import { afterEach, expect, test } from "bun:test";
+import { afterEach, expect, setDefaultTimeout, test } from "bun:test";
 import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { delimiter, join, resolve } from "node:path";
@@ -7,12 +7,26 @@ import { delimiter, join, resolve } from "node:path";
 // On Windows it runs under Git Bash (WSL's System32 bash is not it), and is skipped when Git Bash is not installed.
 const win = process.platform === "win32";
 const script = resolve(import.meta.dir, "../install.sh").replaceAll("\\", "/");
-const bash = win ? (Bun.which("bash") ?? (existsSync("C:\\Program Files\\Git\\bin\\bash.exe") ? "C:\\Program Files\\Git\\bin\\bash.exe" : null)) : "bash";
+const bash = win
+  ? (Bun.which("bash") ??
+    (existsSync("C:\\Program Files\\Git\\bin\\bash.exe") ? "C:\\Program Files\\Git\\bin\\bash.exe" : null))
+  : "bash";
 // MSYS "winsymlinks:native" makes ln -s a real symlink when Windows allows it and an MSYS symlink otherwise, so no privilege is needed.
 const t = bash ? test : test.skip;
+// Each test runs git and install.sh under Git Bash several times: 1-4 s alone on Windows, over bun's 5 s default
+// when the machine is busy (the full suite ran four of them past it).
+setDefaultTimeout(30_000);
 const baseEnv = Object.fromEntries(Object.entries(process.env).filter(([k]) => k.toLowerCase() !== "path"));
 const PATH_KEY = win ? "Path" : "PATH";
-const gitEnv = { ...baseEnv, GIT_CONFIG_GLOBAL: win ? "NUL" : "/dev/null", GIT_CONFIG_NOSYSTEM: "1", GIT_AUTHOR_NAME: "t", GIT_AUTHOR_EMAIL: "t@example.com", GIT_COMMITTER_NAME: "t", GIT_COMMITTER_EMAIL: "t@example.com" };
+const gitEnv = {
+  ...baseEnv,
+  GIT_CONFIG_GLOBAL: win ? "NUL" : "/dev/null",
+  GIT_CONFIG_NOSYSTEM: "1",
+  GIT_AUTHOR_NAME: "t",
+  GIT_AUTHOR_EMAIL: "t@example.com",
+  GIT_COMMITTER_NAME: "t",
+  GIT_COMMITTER_EMAIL: "t@example.com",
+};
 const roots: string[] = [];
 afterEach(() => {
   for (const r of roots.splice(0)) rmSync(r, { recursive: true, force: true });
@@ -49,7 +63,18 @@ function setup() {
     git(upstream, "commit", "-qam", text.trim());
   };
   const install = (env: Record<string, string> = {}) => {
-    const r = Bun.spawnSync([bash as string, script], { env: { ...gitEnv, HOME: home, DORI_HOME: join(home, ".dori"), DORI_SRC: src, SKILLS_DIR: join(home, "skills"), [PATH_KEY]: `${bin}${delimiter}${process.env.PATH ?? process.env.Path}`, MSYS: "winsymlinks:native", ...env } });
+    const r = Bun.spawnSync([bash as string, script], {
+      env: {
+        ...gitEnv,
+        HOME: home,
+        DORI_HOME: join(home, ".dori"),
+        DORI_SRC: src,
+        SKILLS_DIR: join(home, "skills"),
+        [PATH_KEY]: `${bin}${delimiter}${process.env["PATH"] ?? process.env["Path"]}`,
+        MSYS: "winsymlinks:native",
+        ...env,
+      },
+    });
     return { code: r.exitCode, err: r.stderr.toString() };
   };
   return { root, upstream, src, home, cli, upstreamCommit, install };

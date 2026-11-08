@@ -1,6 +1,7 @@
 # Installs the dori-mode skill and the `dori` CLI on Windows. One line, from any folder in PowerShell:
 #   irm https://raw.githubusercontent.com/useonmn/win-dori/main/install.ps1 | iex
-# Needs git. Installs bun and herdr with their official installers when they are missing (DORI_NO_DEPS=1 skips that).
+# Needs git. Installs bun and herdr (or hc, when DORI_RUNTIME or config.json "runtime" says hc) with their official
+# installers when they are missing (DORI_NO_DEPS=1 skips that).
 # Optional env: DORI_REPO (owner/name, clone URL or local path; a private owner/name needs `gh auth login`),
 # DORI_SRC (checkout dir), SKILLS_DIR (where your agent loads skills), DORI_HOME (config dir, default ~\.dori).
 # Then it places the Windows Dori setup from profile/ (profile\install-profile.ps1). It asks nothing: the Dori asks for
@@ -57,7 +58,18 @@ if (-not (Get-Command bun -ErrorAction SilentlyContinue)) {
   }
   if (-not (Get-Command bun -ErrorAction SilentlyContinue)) { throw 'bun is required: https://bun.sh' }
 }
-if (-not (Get-Command herdr -ErrorAction SilentlyContinue)) {
+# The session runtime, as dori picks it: DORI_RUNTIME, else "runtime" in the Dori's config.json, else herdr. hc (herdr-core)
+# comes from its official installer, like herdr from its own.
+$doriConfig = Join-Path $(if ($env:DORI_HOME) { $env:DORI_HOME } else { Join-Path $userHome '.dori' }) 'config.json'
+$runtime = if ($env:DORI_RUNTIME) { $env:DORI_RUNTIME } elseif (Test-Path -LiteralPath $doriConfig) {
+  try { [string](Get-Content -LiteralPath $doriConfig -Raw -Encoding utf8 | ConvertFrom-Json).runtime } catch { '' }
+} else { '' }
+if ($runtime -eq 'hc') {
+  if (-not (Get-Command hc -ErrorAction SilentlyContinue)) {
+    if ($installDeps) { Install-FromScript 'hc (herdr-core)' 'https://releases.herdr.dev/core/install.ps1' }
+    if (-not (Get-Command hc -ErrorAction SilentlyContinue)) { Write-Warning 'hc is not on PATH yet; the Dori needs it with runtime hc: https://github.com/herdrdev/herdr-core' }
+  }
+} elseif (-not (Get-Command herdr -ErrorAction SilentlyContinue)) {
   if ($installDeps) { Install-FromScript 'herdr' 'https://herdr.dev/install.ps1' }
   if (-not (Get-Command herdr -ErrorAction SilentlyContinue)) { Write-Warning 'herdr is not on PATH yet; the Dori needs it: https://herdr.dev' }
 }

@@ -17,8 +17,8 @@ function pidAlive(pid: number): boolean {
   try {
     process.kill(pid, 0);
     return true;
-  } catch (e: any) {
-    return e?.code === "EPERM";
+  } catch (e) {
+    return (e as NodeJS.ErrnoException | null)?.code === "EPERM";
   }
 }
 
@@ -30,8 +30,8 @@ function acquireLock(): boolean {
       writeSync(fd, String(process.pid));
       closeSync(fd);
       return true;
-    } catch (e: any) {
-      if (e?.code !== "EEXIST") throw e;
+    } catch (e) {
+      if ((e as NodeJS.ErrnoException | null)?.code !== "EEXIST") throw e;
     }
     let pid = NaN;
     try {
@@ -60,14 +60,13 @@ async function pumpLines(stream: ReadableStream<Uint8Array>, prefix: string) {
   let buf = "";
   for await (const chunk of stream) {
     buf += dec.decode(chunk, { stream: true });
-    let i: number;
-    while ((i = buf.indexOf("\n")) >= 0) {
+    for (let i = buf.indexOf("\n"); i >= 0; i = buf.indexOf("\n")) {
       process.stdout.write(prefix + buf.slice(0, i + 1));
       buf = buf.slice(i + 1);
     }
   }
   buf += dec.decode();
-  if (buf.length) process.stdout.write(prefix + buf + "\n");
+  if (buf.length) process.stdout.write(`${prefix + buf}\n`);
 }
 
 let child: ReturnType<typeof Bun.spawn> | null = null;

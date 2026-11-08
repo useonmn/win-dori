@@ -15,10 +15,22 @@ import { join, relative, resolve } from "node:path";
 
 const SALT = "win-dori-guard-v1:";
 const DENY_HASHES = new Set([
-  "067fb21bcc06d8df3198", "3ebcc1f234aba7dcacb2", "5a0d675ef582e6de7768", "5b5bdb0d715819ed0c41",
-  "82bb389303570addc0ec", "879f0697262083924885", "94a7e53438bf1bbb7c6f", "abfc54a8ec00f3ab058e",
-  "b65fe1aad511380cda75", "b718ab2522e4ee2e3414", "bf666283bf01e6a6b696", "c9713ed0712e0570270f",
-  "caafe4e8103a8efcbfdf", "eac2ed11eb3c3683b14c", "f01a4bc1bcdd0850c0ea", "f0cfd6c0b25b8c97a8be",
+  "067fb21bcc06d8df3198",
+  "3ebcc1f234aba7dcacb2",
+  "5a0d675ef582e6de7768",
+  "5b5bdb0d715819ed0c41",
+  "82bb389303570addc0ec",
+  "879f0697262083924885",
+  "94a7e53438bf1bbb7c6f",
+  "abfc54a8ec00f3ab058e",
+  "b65fe1aad511380cda75",
+  "b718ab2522e4ee2e3414",
+  "bf666283bf01e6a6b696",
+  "c9713ed0712e0570270f",
+  "caafe4e8103a8efcbfdf",
+  "eac2ed11eb3c3683b14c",
+  "f01a4bc1bcdd0850c0ea",
+  "f0cfd6c0b25b8c97a8be",
   "fb8f0fc4a87d6dfc8779",
 ]);
 /** Ordinary words that contain a denied Hangul substring; removed before the substring scan. */
@@ -28,23 +40,35 @@ const SKIP = [/(^|\/)bun\.lock$/, /\.(png|jpe?g|gif|webp|ico)$/i, /^test\/check-
 
 const RULES: { name: string; re: RegExp }[] = [
   // C:\Users\<name>\... (placeholders like <you>, %USERNAME%, $env:USERNAME are fine)
-  { name: "user-home-path", re: /[A-Za-z]:(?:\\\\|\\|\/)+Users(?:\\\\|\\|\/)+(?![<%${]|Public\b|Default\b|ana\b|bob\b|me\b|u\b|x\b|a b\b|test\b)[^\\/\s"'`)]+/i },
-  { name: "user-home-path", re: /(?<![\w.$:])\/(?:home|Users)\/(?![<$%{]|runner\b|dori\b|ana\b|bob\b|me\b|test\b|a\b|a b\b)[a-z][\w.-]*/ },
+  {
+    name: "user-home-path",
+    re: /[A-Za-z]:(?:\\\\|\\|\/)+Users(?:\\\\|\\|\/)+(?![<%${]|Public\b|Default\b|ana\b|bob\b|me\b|u\b|x\b|a b\b|test\b)[^\\/\s"'`)]+/i,
+  },
+  {
+    name: "user-home-path",
+    re: /(?<![\w.$:])\/(?:home|Users)\/(?![<$%{]|runner\b|dori\b|ana\b|bob\b|me\b|test\b|a\b|a b\b)[a-z][\w.-]*/,
+  },
   // a fixed install root: a top-level dev folder on a drive, in Windows or Git Bash spelling
   { name: "fixed-install-root", re: /\b[A-Za-z]:(?:\\\\|\\|\/)+dev(?:\\\\|\\|\/)/i },
   { name: "fixed-install-root", re: /(?<![\w.])\/[a-z]\/dev\//i },
   // a personal mailbox (example.com, noreply and local test addresses are fine)
-  { name: "personal-email", re: /[\w.+-]+@(?:gmail|googlemail|naver|daum|hanmail|kakao|hotmail|outlook|live|icloud|me|yahoo|proton(?:mail)?)\.[a-z.]+/i },
+  {
+    name: "personal-email",
+    re: /[\w.+-]+@(?:gmail|googlemail|naver|daum|hanmail|kakao|hotmail|outlook|live|icloud|me|yahoo|proton(?:mail)?)\.[a-z.]+/i,
+  },
 ];
 
 export function hashValue(v: string): string {
-  return new Bun.CryptoHasher("sha256").update(SALT + v.toLowerCase()).digest("hex").slice(0, 20);
+  return new Bun.CryptoHasher("sha256")
+    .update(SALT + v.toLowerCase())
+    .digest("hex")
+    .slice(0, 20);
 }
 
 function localDeny(root: string): Set<string> {
   const out = new Set<string>();
   const add = (v: string) => v.trim() && out.add(hashValue(v.trim()));
-  for (const v of (process.env.DORI_GUARD_DENY ?? "").split(",")) add(v);
+  for (const v of (process.env["DORI_GUARD_DENY"] ?? "").split(",")) add(v);
   const f = join(root, ".guard-deny");
   if (existsSync(f)) for (const v of readFileSync(f, "utf8").split(/\r?\n/)) if (!v.startsWith("#")) add(v);
   return out;
@@ -67,7 +91,12 @@ export function tokens(line: string): string[] {
   return out;
 }
 
-export interface Hit { file: string; line: number; rule: string; sample: string }
+export interface Hit {
+  file: string;
+  line: number;
+  rule: string;
+  sample: string;
+}
 
 const mask = (s: string) => (s.length <= 2 ? "*".repeat(s.length) : s[0] + "*".repeat(s.length - 2) + s[s.length - 1]);
 
@@ -89,9 +118,15 @@ export function scanText(file: string, text: string, deny: Set<string> = DENY_HA
 }
 
 async function listFiles(root: string): Promise<string[]> {
-  const p = Bun.spawn(["git", "ls-files", "-co", "--exclude-standard", "-z"], { cwd: root, env: process.env, stdout: "pipe", stderr: "pipe", stdin: "ignore" });
+  const p = Bun.spawn(["git", "ls-files", "-co", "--exclude-standard", "-z"], {
+    cwd: root,
+    env: process.env,
+    stdout: "pipe",
+    stderr: "pipe",
+    stdin: "ignore",
+  });
   const out = await new Response(p.stdout).text();
-  if ((await p.exited) !== 0) throw new Error("git ls-files failed: " + (await new Response(p.stderr).text()));
+  if ((await p.exited) !== 0) throw new Error(`git ls-files failed: ${await new Response(p.stderr).text()}`);
   return out.split("\0").filter(Boolean);
 }
 
@@ -117,6 +152,8 @@ if (import.meta.main) {
     hits.push(...scanText(f, buf.toString("utf8"), deny));
   }
   for (const h of hits) console.log(`${h.file}:${h.line}: ${h.rule}: ${h.sample}`);
-  console.log(hits.length ? `check-paths: FAIL (${hits.length} hits in ${scanned} files)` : `check-paths: OK (${scanned} files)`);
+  console.log(
+    hits.length ? `check-paths: FAIL (${hits.length} hits in ${scanned} files)` : `check-paths: OK (${scanned} files)`,
+  );
   process.exit(hits.length ? 1 : 0);
 }

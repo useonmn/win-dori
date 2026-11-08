@@ -21,11 +21,24 @@ export type MonitorKind = (typeof MONITOR_KINDS)[number];
 export const CHECK_MS = 30_000;
 
 export type ProcRef = { readonly pid: number; readonly startedAt?: number };
-export type MonitorLock = { readonly kind: string; readonly pid: number; readonly startedAt?: number; readonly chain: readonly ProcRef[]; readonly parent?: ProcRef; readonly at: string };
-export type Instance = ProcRef & { readonly kind: MonitorKind; readonly home: string; readonly chain: readonly ProcRef[]; readonly parent?: ProcRef };
+export type MonitorLock = {
+  readonly kind: string;
+  readonly pid: number;
+  readonly startedAt?: number;
+  readonly chain: readonly ProcRef[];
+  readonly parent?: ProcRef;
+  readonly at: string;
+};
+export type Instance = ProcRef & {
+  readonly kind: MonitorKind;
+  readonly home: string;
+  readonly chain: readonly ProcRef[];
+  readonly parent?: ProcRef;
+};
 export type Env = Record<string, string | undefined>;
 
-const isKind = (value: string | undefined): value is MonitorKind => (MONITOR_KINDS as readonly string[]).includes(value ?? "");
+const isKind = (value: string | undefined): value is MonitorKind =>
+  (MONITOR_KINDS as readonly string[]).includes(value ?? "");
 
 /** watch always loops; the other kinds are monitors only with `--loop N`, N > 0 (a one-shot run is not one). */
 export const monitorKind = (command: string, loopMin: number): MonitorKind | undefined =>
@@ -44,35 +57,56 @@ export const commandKind = (cmd: string): MonitorKind | undefined => {
   return monitorKind(command ?? "", Number.isFinite(loop) ? loop : 0);
 };
 
-const image = (cmd: string): string => baseName(parseWindowsCommandLine(cmd)[0] ?? "").toLowerCase().replace(/\.exe$/, "");
+const image = (cmd: string): string =>
+  baseName(parseWindowsCommandLine(cmd)[0] ?? "")
+    .toLowerCase()
+    .replace(/\.exe$/, "");
 
 /** A launcher between the arming shell and the monitor: dori.exe, a mise hop, or a bun running the same cli.ts. */
-const isWrapper = (p: WinProc): boolean => image(p.cmd) === "dori" || image(p.cmd) === "mise" || commandKind(p.cmd) !== undefined;
+const isWrapper = (p: WinProc): boolean =>
+  image(p.cmd) === "dori" || image(p.cmd) === "mise" || commandKind(p.cmd) !== undefined;
 
-const ref = (p: WinProc): ProcRef => (p.startedAt === undefined ? { pid: p.pid } : { pid: p.pid, startedAt: p.startedAt });
+const ref = (p: WinProc): ProcRef =>
+  p.startedAt === undefined ? { pid: p.pid } : { pid: p.pid, startedAt: p.startedAt };
 
 /** True when `r` is still the same process: its pid is listed with the same start time (a reused pid is not). */
 export const isLive = (table: readonly WinProc[], r: ProcRef): boolean =>
-  table.some((p) => p.pid === r.pid && (r.startedAt === undefined || p.startedAt === undefined || p.startedAt === r.startedAt));
+  table.some(
+    (p) => p.pid === r.pid && (r.startedAt === undefined || p.startedAt === undefined || p.startedAt === r.startedAt),
+  );
 
 /**
  * The wrappers above `pid` (nearest first) and the process that armed it: the nearest ancestor that is not a
  * wrapper, or `explicitParent` when given. A parent link to a pid started after its child is a reused pid, so the
  * walk stops there: the real parent is gone.
  */
-export const monitorChain = (table: readonly WinProc[], pid: number, explicitParent?: number): { chain: ProcRef[]; parent?: ProcRef } => {
+export const monitorChain = (
+  table: readonly WinProc[],
+  pid: number,
+  explicitParent?: number,
+): { chain: ProcRef[]; parent?: ProcRef } => {
   const byPid = new Map(table.map((p) => [p.pid, p]));
   const chain: ProcRef[] = [];
   let cur = byPid.get(pid);
   let parent: WinProc | undefined;
   while (cur) {
     const up = byPid.get(cur.ppid);
-    if (!up || up.pid === cur.pid || (up.startedAt !== undefined && cur.startedAt !== undefined && up.startedAt > cur.startedAt)) break;
+    if (
+      !up ||
+      up.pid === cur.pid ||
+      (up.startedAt !== undefined && cur.startedAt !== undefined && up.startedAt > cur.startedAt)
+    )
+      break;
     if (!isWrapper(up)) {
       parent = up;
       // Git Bash runs `bash -c "cmd > file"` as a bash forking a copy of itself with the same command line; the
       // session holds the outer one, so the watch goes on the outermost copy.
-      for (let outer = byPid.get(parent.ppid); outer && outer.pid !== parent.pid && outer.cmd === parent.cmd; outer = byPid.get(outer.ppid)) parent = outer;
+      for (
+        let outer = byPid.get(parent.ppid);
+        outer && outer.pid !== parent.pid && outer.cmd === parent.cmd;
+        outer = byPid.get(outer.ppid)
+      )
+        parent = outer;
       break;
     }
     chain.push(ref(up));
@@ -84,17 +118,19 @@ export const monitorChain = (table: readonly WinProc[], pid: number, explicitPar
 
 /** Which Dori home an environment points at: its config file and state directory, as the CLI resolves them. */
 export const homeKey = (env: Env): string =>
-  `${pathKey(env.DORI_CONFIG ?? join(env.USERPROFILE ?? env.HOME ?? homedir(), ".dori", "config.json"))}|${pathKey(env.DORI_STATE_DIR ?? "")}`;
+  `${pathKey(env["DORI_CONFIG"] ?? join(env["USERPROFILE"] ?? env["HOME"] ?? homedir(), ".dori", "config.json"))}|${pathKey(env["DORI_STATE_DIR"] ?? "")}`;
 
 /**
  * Running monitor instances: the innermost process of each chain (the real bun; its wrappers carry the same command
  * line). A process whose environment cannot be read has no known home and is left out, so it is never stopped.
  */
 export const scanMonitors = (table: readonly WinProc[], readEnv: (pid: number) => Env | undefined): Instance[] => {
-  const kinds = new Map(table.flatMap((p) => {
-    const kind = commandKind(p.cmd);
-    return kind ? [[p.pid, kind] as const] : [];
-  }));
+  const kinds = new Map(
+    table.flatMap((p) => {
+      const kind = commandKind(p.cmd);
+      return kind ? [[p.pid, kind] as const] : [];
+    }),
+  );
   return table.flatMap((p) => {
     const kind = kinds.get(p.pid);
     if (!kind || table.some((c) => c.ppid === p.pid && c.pid !== p.pid && kinds.get(c.pid) === kind)) return [];
@@ -115,8 +151,10 @@ export const readLock = (path: string): MonitorLock | undefined => {
 };
 
 /** The process to stop for a whole instance: its outermost wrapper still running, else the instance itself. */
-export const treeTop = (table: readonly WinProc[], instance: ProcRef & { readonly chain: readonly ProcRef[] }): ProcRef =>
-  [...instance.chain].reverse().find((r) => isLive(table, r)) ?? instance;
+export const treeTop = (
+  table: readonly WinProc[],
+  instance: ProcRef & { readonly chain: readonly ProcRef[] },
+): ProcRef => [...instance.chain].reverse().find((r) => isLive(table, r)) ?? instance;
 
 export type GuardDeps = {
   readonly kind: MonitorKind;
@@ -166,7 +204,7 @@ export const takeMonitor = async (d: GuardDeps): Promise<Guard | undefined> => {
     replaced.push(v.pid);
     d.out(`MONITOR_REPLACED ${d.kind} pid=${v.pid} tree=${top.pid}`);
   }
-  const explicit = Number(d.env.DORI_MONITOR_PARENT);
+  const explicit = Number(d.env["DORI_MONITOR_PARENT"]);
   const mine = monitorChain(table, d.pid, Number.isInteger(explicit) && explicit > 0 ? explicit : undefined);
   const lock: MonitorLock = { kind: d.kind, ...ref(self), ...mine, at: new Date(d.now()).toISOString() };
   mkdirSync(join(d.stateDir, "run"), { recursive: true });
@@ -194,7 +232,12 @@ export const takeMonitor = async (d: GuardDeps): Promise<Guard | undefined> => {
 export type DuplicateReport = { readonly lines: readonly string[]; readonly duplicates: number };
 
 /** `dori status`: this home's monitor instances, and a MONITOR_DUPLICATE warning per kind running more than once. */
-export const monitorStatus = (table: readonly WinProc[], readEnv: (pid: number) => Env | undefined, env: Env, stateDir: string): DuplicateReport => {
+export const monitorStatus = (
+  table: readonly WinProc[],
+  readEnv: (pid: number) => Env | undefined,
+  env: Env,
+  stateDir: string,
+): DuplicateReport => {
   const home = homeKey(env);
   const mine = scanMonitors(table, readEnv).filter((i) => i.home === home);
   const lines: string[] = [];
@@ -203,7 +246,10 @@ export const monitorStatus = (table: readonly WinProc[], readEnv: (pid: number) 
     const of = mine.filter((i) => i.kind === kind);
     const lock = readLock(lockPath(stateDir, kind));
     const holder = lock && isLive(table, lock) ? ` lock=${lock.pid}` : "";
-    for (const i of of) lines.push(`MONITOR ${kind} pid=${i.pid} parent=${i.parent?.pid ?? "gone"}${i.startedAt ? ` started=${new Date(i.startedAt).toISOString()}` : ""}${holder}`);
+    for (const i of of)
+      lines.push(
+        `MONITOR ${kind} pid=${i.pid} parent=${i.parent?.pid ?? "gone"}${i.startedAt ? ` started=${new Date(i.startedAt).toISOString()}` : ""}${holder}`,
+      );
     if (!of.length) lines.push(`MONITOR ${kind} none`);
     if (of.length > 1) {
       duplicates++;
@@ -214,13 +260,17 @@ export const monitorStatus = (table: readonly WinProc[], readEnv: (pid: number) 
 };
 
 export const listProcesses = (run: Runner) => async (): Promise<WinProc[]> => {
-  const r = await run(["powershell", "-NoProfile", "-NonInteractive", "-Command", WIN_PROC_SCRIPT], { timeoutMs: 30_000 });
+  const r = await run(["powershell", "-NoProfile", "-NonInteractive", "-Command", WIN_PROC_SCRIPT], {
+    timeoutMs: 30_000,
+  });
   return r.code === 0 ? parseWin32Processes(r.out) : [];
 };
 
-export const killTree = (run: Runner) => async (pid: number): Promise<void> => {
-  await run(["taskkill", "/T", "/F", "/PID", String(pid)], { timeoutMs: 30_000 });
-};
+export const killTree =
+  (run: Runner) =>
+  async (pid: number): Promise<void> => {
+    await run(["taskkill", "/T", "/F", "/PID", String(pid)], { timeoutMs: 30_000 });
+  };
 
 const SYNCHRONIZE = 0x0010_0000;
 const PROCESS_QUERY_LIMITED_INFORMATION = 0x1000;

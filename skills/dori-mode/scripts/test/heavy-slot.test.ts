@@ -10,16 +10,19 @@ const fakeClock = (slept: number[]): Clock => ({ now: () => 0, sleep: async (ms)
 
 const errno = (code: string) => Object.assign(new Error(code), { code });
 
-test.skipIf(process.platform !== "win32")("pidAlive on Windows: live, System (exists but not ours), dead, and exited pids", async () => {
-  const child = Bun.spawn(["cmd", "/c", "exit", "0"]);
-  await child.exited;
-  expect(pidAlive(process.pid, true)).toBe(true);
-  expect(pidAlive(4, true)).toBe(true);
-  expect(pidAlive(child.pid, true)).toBe(false);
-  expect(pidAlive(999999, true)).toBe(false);
-  expect(pidAlive(0, true)).toBe(false);
-  expect(pidAlive(-1, true)).toBe(false);
-});
+test.skipIf(process.platform !== "win32")(
+  "pidAlive on Windows: live, System (exists but not ours), dead, and exited pids",
+  async () => {
+    const child = Bun.spawn(["cmd", "/c", "exit", "0"]);
+    await child.exited;
+    expect(pidAlive(process.pid, true)).toBe(true);
+    expect(pidAlive(4, true)).toBe(true);
+    expect(pidAlive(child.pid, true)).toBe(false);
+    expect(pidAlive(999999, true)).toBe(false);
+    expect(pidAlive(0, true)).toBe(false);
+    expect(pidAlive(-1, true)).toBe(false);
+  },
+);
 
 test("pidAlive off Windows: a missing pid is dead without consulting ps", () => {
   expect(pidAlive(999999, false)).toBe(false);
@@ -70,7 +73,11 @@ test("acquireSlot reclaims a slot whose owner pid is dead", async () => {
   const slot = join(dir, "slot.1");
   mkdirSync(slot);
   writeFileSync(join(slot, "owner"), `999999 old 1970-01-01T00:00:00.000Z`);
-  const got = await acquireSlot({ dir, slots: 1, maxLoad: 10, clock: fakeClock([]), load: async () => 0, alive: pidAlive, pid: process.pid }, "new", 1);
+  const got = await acquireSlot(
+    { dir, slots: 1, maxLoad: 10, clock: fakeClock([]), load: async () => 0, alive: pidAlive, pid: process.pid },
+    "new",
+    1,
+  );
   expect(got).toBe(slot);
   expect(existsSync(join(slot, "owner"))).toBe(true);
 });

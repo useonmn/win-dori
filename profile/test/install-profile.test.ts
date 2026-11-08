@@ -1,7 +1,16 @@
 // Drives profile/install-profile.ps1 and the boot script in Windows PowerShell (what a fresh PC has) against a temp
 // home folder: no scheduled task, no prompts.
 import { afterAll, beforeAll, expect, setDefaultTimeout, test } from "bun:test";
-import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
+import {
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readdirSync,
+  readFileSync,
+  rmSync,
+  statSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { join, relative } from "node:path";
 
@@ -16,7 +25,15 @@ let dori = "";
 const ps = async (args: string[], env: Record<string, string> = {}) => {
   const p = Bun.spawn(["powershell", "-NoProfile", "-ExecutionPolicy", "Bypass", ...args], {
     // An inherited DORI_HOME (an isolated test run, a lead shell) would send the install outside the test home, as inHome knows.
-    env: { ...Object.fromEntries(Object.entries(process.env as Record<string, string>).filter(([k]) => !k.startsWith("DORI_"))), USERPROFILE: home, HOME: home, LOCALAPPDATA: join(home, "AppData", "Local"), ...env },
+    env: {
+      ...Object.fromEntries(
+        Object.entries(process.env as Record<string, string>).filter(([k]) => !k.startsWith("DORI_")),
+      ),
+      USERPROFILE: home,
+      HOME: home,
+      LOCALAPPDATA: join(home, "AppData", "Local"),
+      ...env,
+    },
     stdin: "ignore",
     stdout: "pipe",
     stderr: "pipe",
@@ -57,9 +74,18 @@ test("a fresh home gets every profile file, with no absolute home path inside", 
 
 test("slack.env holds the values and only the current user can read it", async () => {
   const env = readFileSync(join(dori, "slack.env"), "utf8");
-  for (const kv of ["DORI_SLACK_TOKEN=xoxb-test-only", "DORI_SLACK_OWNER=UOWNER", "DORI_SLACK_BOT_USER=UBOT", "DORI_SLACK_CHANNEL=CTEST"]) expect(env).toContain(kv);
+  for (const kv of [
+    "DORI_SLACK_TOKEN=xoxb-test-only",
+    "DORI_SLACK_OWNER=UOWNER",
+    "DORI_SLACK_BOT_USER=UBOT",
+    "DORI_SLACK_CHANNEL=CTEST",
+  ])
+    expect(env).toContain(kv);
   for (const f of ["slack.env"]) {
-    const acl = await ps(["-Command", `$env:PSModulePath = [Environment]::GetEnvironmentVariable('PSModulePath', 'Machine'); $a = Get-Acl -LiteralPath '${join(dori, f)}'; "$($a.AreAccessRulesProtected)"; $a.Access | % { $_.IdentityReference.Translate([Security.Principal.SecurityIdentifier]).Value }; [Security.Principal.WindowsIdentity]::GetCurrent().User.Value`]);
+    const acl = await ps([
+      "-Command",
+      `$env:PSModulePath = [Environment]::GetEnvironmentVariable('PSModulePath', 'Machine'); $a = Get-Acl -LiteralPath '${join(dori, f)}'; "$($a.AreAccessRulesProtected)"; $a.Access | % { $_.IdentityReference.Translate([Security.Principal.SecurityIdentifier]).Value }; [Security.Principal.WindowsIdentity]::GetCurrent().User.Value`,
+    ]);
     const [prot, ...rest] = acl.out.trim().split(/\r?\n/);
     const me = rest.pop();
     expect(prot).toBe("True");
@@ -77,7 +103,7 @@ test("a second run changes nothing", async () => {
 test("a local edit is kept and shown, -DryRun touches nothing, -Force replaces it with a backup", async () => {
   const k = join(dori, "slack-manifest.json");
   const original = readFileSync(k, "utf8");
-  writeFileSync(k, original + "\nexport const LOCAL = 1;\n");
+  writeFileSync(k, `${original}\nexport const LOCAL = 1;\n`);
   const kept = await install();
   expect(kept.out).toMatch(/keep\s+slack-manifest\.json \(local edits/);
   expect(kept.out).toContain("local | export const LOCAL = 1;");
@@ -106,11 +132,19 @@ test("boot writes this PC's herdr ids into config.json and keeps the other setti
   const c = join(dori, "config.json");
   writeFileSync(c, readFileSync(join(PROFILE, "dori", "config.json")));
   const herdr = join(root, "fake-herdr.cmd");
-  writeFileSync(herdr, '@echo off\r\nif not "%2"=="create" exit /b 0\r\necho {"result":{"workspace":{"workspace_id":"wQ"},"pane_id":"wQ:p1"}}\r\n');
+  writeFileSync(
+    herdr,
+    '@echo off\r\nif not "%2"=="create" exit /b 0\r\necho {"result":{"workspace":{"workspace_id":"wQ"},"pane_id":"wQ:p1"}}\r\n',
+  );
   const off = await ps(["-File", BOOT, "-Herdr", herdr, "-NoLaunch"]);
   expect(off.out).toContain("BOOT_OK pane=wQ:p1 workspace=wQ name=Dori");
   const cfg = JSON.parse(readFileSync(c, "utf8"));
-  expect([cfg.leadPane, cfg.laneWorkspace, cfg.workspaces, cfg.ignorePanes]).toEqual(["wQ:p1", "wQ", ["wQ"], ["wQ:p1"]]);
+  expect([cfg.leadPane, cfg.laneWorkspace, cfg.workspaces, cfg.ignorePanes]).toEqual([
+    "wQ:p1",
+    "wQ",
+    ["wQ"],
+    ["wQ:p1"],
+  ]);
   expect(cfg.defaultModel).toBe(JSON.parse(readFileSync(join(PROFILE, "dori", "config.json"), "utf8")).defaultModel);
   expect(cfg.guard.panesMax).toBe(20);
 
@@ -119,26 +153,83 @@ test("boot writes this PC's herdr ids into config.json and keeps the other setti
   expect(existsSync(join(dori, "state", "boot.log"))).toBe(true);
 });
 
+test("with runtime hc, boot opens a labelled hc terminal and writes its address and the group into config.json", async () => {
+  const c = join(dori, "config.json");
+  writeFileSync(
+    c,
+    JSON.stringify({ ...JSON.parse(readFileSync(join(PROFILE, "dori", "config.json"), "utf8")), runtime: "hc" }),
+  );
+  const hc = join(root, "fake-hc.cmd");
+  const log = join(root, "fake-hc.log");
+  writeFileSync(
+    hc,
+    `@echo off\r\necho %* >> "${log}"\r\nif "%2"=="run" echo {"address":"t3","state":"live"}\r\nexit /b 0\r\n`,
+  );
+  const r = await ps(["-File", BOOT, "-Hc", hc, "-Herdr", join(root, "no-herdr.cmd"), "-NoLaunch"]);
+  expect(r.out).toContain("BOOT_OK pane=t3 workspace=dori name=Dori");
+  expect(r.out).toContain("runtime=hc");
+  const cfg = JSON.parse(readFileSync(c, "utf8"));
+  expect([cfg.leadPane, cfg.laneWorkspace, cfg.workspaces, cfg.ignorePanes, cfg.runtime]).toEqual([
+    "t3",
+    "dori",
+    ["dori"],
+    ["t3"],
+    "hc",
+  ]);
+  const calls = readFileSync(log, "utf8");
+  expect(calls).toContain("--json run --bg --no-parent --no-notify");
+  expect(calls).toContain("dori.group=dori");
+  expect(calls).toContain("dori.role=lead");
+});
+
 test("secrets never reach user environment variables: the script has no SetEnvironmentVariable and HKCU holds no test value", async () => {
   expect(readFileSync(SCRIPT, "utf8")).not.toMatch(/SetEnvironmentVariable/i);
   const r = await install("-Force");
   expect(r.out).not.toMatch(/environment variable/i);
-  const hkcu = await ps(["-Command", "foreach ($k in 'DORI_SLACK_TOKEN','DORI_SLACK_APP_TOKEN','DORI_SLACK_APP_ID','DORI_SLACK_CHANNEL','DORI_SLACK_OWNER','DORI_SLACK_BOT_USER') { [Environment]::GetEnvironmentVariable($k, 'User') }"]);
-  for (const v of ["xoxb-test-only", "xapp-test-only", "ATEST", "CTEST", "UOWNER", "UBOT"]) expect(hkcu.out).not.toContain(v);
+  const hkcu = await ps([
+    "-Command",
+    "foreach ($k in 'DORI_SLACK_TOKEN','DORI_SLACK_APP_TOKEN','DORI_SLACK_APP_ID','DORI_SLACK_CHANNEL','DORI_SLACK_OWNER','DORI_SLACK_BOT_USER') { [Environment]::GetEnvironmentVariable($k, 'User') }",
+  ]);
+  for (const v of ["xoxb-test-only", "xapp-test-only", "ATEST", "CTEST", "UOWNER", "UBOT"])
+    expect(hkcu.out).not.toContain(v);
 });
 
 test("by default nothing is asked and inherited DORI_SLACK_* values are ignored: no slack.env, the task is deferred until a messenger env file is complete, -TaskOnly refuses", async () => {
   const bare = join(root, "Users", "fresh");
   mkdirSync(bare, { recursive: true });
   const name = `Dori Autostart Test-${process.pid}-${Date.now()}`;
-  const clean = Object.fromEntries(Object.entries(process.env as Record<string, string>).filter(([k]) => !k.startsWith("DORI_")));
+  const clean = Object.fromEntries(
+    Object.entries(process.env as Record<string, string>).filter(([k]) => !k.startsWith("DORI_")),
+  );
   const run = async (args: string[]) => {
-    const p = Bun.spawn(["powershell", "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", SCRIPT, "-DoriHome", join(bare, ".dori"), "-TaskName", name, ...args], {
-      env: { ...clean, DORI_SLACK_TOKEN: "xoxb-inherited-stale", DORI_SLACK_OWNER: "USTALE", USERPROFILE: bare, HOME: bare, LOCALAPPDATA: join(bare, "AppData", "Local") },
-      stdin: "ignore",
-      stdout: "pipe",
-      stderr: "pipe",
-    });
+    const p = Bun.spawn(
+      [
+        "powershell",
+        "-NoProfile",
+        "-ExecutionPolicy",
+        "Bypass",
+        "-File",
+        SCRIPT,
+        "-DoriHome",
+        join(bare, ".dori"),
+        "-TaskName",
+        name,
+        ...args,
+      ],
+      {
+        env: {
+          ...clean,
+          DORI_SLACK_TOKEN: "xoxb-inherited-stale",
+          DORI_SLACK_OWNER: "USTALE",
+          USERPROFILE: bare,
+          HOME: bare,
+          LOCALAPPDATA: join(bare, "AppData", "Local"),
+        },
+        stdin: "ignore",
+        stdout: "pipe",
+        stderr: "pipe",
+      },
+    );
     const [out, err] = await Promise.all([new Response(p.stdout).text(), new Response(p.stderr).text()]);
     return { code: await p.exited, out: out + err };
   };
@@ -162,7 +253,9 @@ const freshHome = (label: string) => {
   return h;
 };
 const inHome = async (h: string, args: string[], env: Record<string, string> = {}) => {
-  const clean = Object.fromEntries(Object.entries(process.env as Record<string, string>).filter(([k]) => !k.startsWith("DORI_")));
+  const clean = Object.fromEntries(
+    Object.entries(process.env as Record<string, string>).filter(([k]) => !k.startsWith("DORI_")),
+  );
   const p = Bun.spawn(["powershell", "-NoProfile", "-ExecutionPolicy", "Bypass", ...args], {
     env: { ...clean, USERPROFILE: h, HOME: h, LOCALAPPDATA: join(h, "AppData", "Local"), ...env },
     stdin: "ignore",
@@ -200,14 +293,22 @@ test("-SecretsFromEnv writes discord.env owner-only, and the boot script picks d
   expect(r.out).not.toContain("no messenger is set up yet");
   expect(readFileSync(join(h, ".dori", "discord.env"), "utf8")).toContain("DORI_DISCORD_OWNER=333");
   expect(existsSync(join(h, ".dori", "slack.env"))).toBe(false);
-  const acl = await inHome(h, ["-Command", `$env:PSModulePath = [Environment]::GetEnvironmentVariable('PSModulePath', 'Machine'); $a = Get-Acl -LiteralPath '${join(h, ".dori", "discord.env")}'; "$($a.AreAccessRulesProtected)"; $a.Access.Count`]);
+  const acl = await inHome(h, [
+    "-Command",
+    `$env:PSModulePath = [Environment]::GetEnvironmentVariable('PSModulePath', 'Machine'); $a = Get-Acl -LiteralPath '${join(h, ".dori", "discord.env")}'; "$($a.AreAccessRulesProtected)"; $a.Access.Count`,
+  ]);
   expect(acl.out.trim().split(/\r?\n/)).toEqual(["True", "1"]);
 
   const herdr = join(root, "fake-herdr.cmd");
-  writeFileSync(herdr, '@echo off\r\nif not "%2"=="create" exit /b 0\r\necho {"result":{"workspace":{"workspace_id":"wD"},"pane_id":"wD:p1"}}\r\n');
+  writeFileSync(
+    herdr,
+    '@echo off\r\nif not "%2"=="create" exit /b 0\r\necho {"result":{"workspace":{"workspace_id":"wD"},"pane_id":"wD:p1"}}\r\n',
+  );
   const boot = await inHome(h, ["-File", join(h, ".dori", "boot", "dori-boot.ps1"), "-Herdr", herdr, "-NoLaunch"]);
   expect(boot.out).toContain("messenger=discord");
-  const forced = await inHome(h, ["-File", join(h, ".dori", "boot", "dori-boot.ps1"), "-Herdr", herdr, "-NoLaunch"], { DORI_MESSENGER: "telegram" });
+  const forced = await inHome(h, ["-File", join(h, ".dori", "boot", "dori-boot.ps1"), "-Herdr", herdr, "-NoLaunch"], {
+    DORI_MESSENGER: "telegram",
+  });
   expect(forced.out).toContain("messenger=telegram");
   const none = freshHome("none");
   const empty = await inHome(none, ["-File", BOOT, "-Herdr", herdr, "-NoLaunch"]);

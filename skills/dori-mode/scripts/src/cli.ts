@@ -6,7 +6,23 @@ import { parseArgs } from "node:util";
 
 import { bootCheck, slackAuthCheck } from "./boot.ts";
 import { ConfigError, envFilePath, expandHome, fill, loadConfig, loadEnvFiles } from "./config.ts";
-import { detectAside, KEYS, maskValue, type Messenger, MESSENGERS, missingKeys, parseEnvText, parseSetupInput, protectOwnerOnly, realSocketHello, requiredKeys, scrubTokens, SECRET_KEYS, setupMessenger, setupTemplate } from "./setup.ts";
+import {
+  detectAside,
+  KEYS,
+  maskValue,
+  type Messenger,
+  MESSENGERS,
+  missingKeys,
+  parseEnvText,
+  parseSetupInput,
+  protectOwnerOnly,
+  realSocketHello,
+  requiredKeys,
+  scrubTokens,
+  SECRET_KEYS,
+  setupMessenger,
+  setupTemplate,
+} from "./setup.ts";
 import { deadPaneTick, newDeadPaneState } from "./dead-panes.ts";
 import { claimDone, closeLane, type FlowDeps, objectDone, watchTick } from "./done-flow.ts";
 import { freshnessTick } from "./freshness.ts";
@@ -14,16 +30,25 @@ import { acquireSlot, pidAlive, releaseSlot } from "./heavy-slot.ts";
 import { guardTick, sampleHost } from "./host-guard.ts";
 import { adoptLane, launchLane, LaunchError, type LaunchInput, prepareLaunch } from "./launch.ts";
 import { isLessonOutcome, LessonError, Lessons } from "./lessons.ts";
-import { CHECK_MS, killTree, listProcesses, type MonitorKind, monitorKind, monitorStatus, takeMonitor, watchWinProcess } from "./monitor-guard.ts";
+import {
+  CHECK_MS,
+  killTree,
+  listProcesses,
+  type MonitorKind,
+  monitorKind,
+  monitorStatus,
+  takeMonitor,
+  watchWinProcess,
+} from "./monitor-guard.ts";
 import { IS_WINDOWS } from "./paths.ts";
 import { pauseLane, resumeLane } from "./pause.ts";
 import { Registry, statusOf } from "./registry.ts";
 import { isReportKind, reportLine, ReportError, Reports } from "./reports.ts";
-import { realClock, resolveCommand, run } from "./run.ts";
+import { realClock, resolveCommand, run, runtimesOf } from "./run.ts";
 import { syncRegistry } from "./sync.ts";
 import { canLaunch } from "./routing.ts";
 import { fetchHttp, MessengerError, UnsafeMessageError } from "./messenger/http.ts";
-import { Slack } from "./messenger/slack.ts";
+import { Slack, type SlackAuth } from "./messenger/slack.ts";
 import { pollSlackInbound } from "./messenger/slack-inbound.ts";
 import { envInt, fileTgInboundStore, telegramInboundLoop, telegramOwnerVar } from "./messenger/telegram-inbound.ts";
 import { ThreadLedger } from "./messenger/thread-ledger.ts";
@@ -92,7 +117,9 @@ const die = (message: string, code = 1): never => {
   process.exit(code);
 };
 
-const config = await loadConfig().catch((e: unknown) => (e instanceof ConfigError ? die(e.message) : Promise.reject(e)));
+const config = await loadConfig().catch((e: unknown) =>
+  e instanceof ConfigError ? die(e.message) : Promise.reject(e),
+);
 const deps: FlowDeps = { run, clock: realClock, registry: new Registry(config.stateDir), config };
 const [command = "", ...rest] = process.argv.slice(2);
 await loadEnvFiles();
@@ -102,18 +129,43 @@ const flags = parseArgs({
   allowPositionals: true,
   strict: false,
   options: {
-    title: { type: "string" }, brief: { type: "string" }, done: { type: "string" }, thread: { type: "string" },
-    model: { type: "string" }, cwd: { type: "string" }, pane: { type: "string" }, evidence: { type: "string" },
-    reason: { type: "string", multiple: true }, note: { type: "string" }, write: { type: "boolean" }, loop: { type: "string" },
-    to: { type: "string" }, text: { type: "string" }, edit: { type: "string" }, kind: { type: "string" },
-    from: { type: "string" }, stdin: { type: "boolean" }, set: { type: "string", multiple: true }, "dry-run": { type: "boolean" },
-    "no-socket": { type: "boolean" }, prepare: { type: "boolean" }, check: { type: "boolean" }, "no-open": { type: "boolean" },
-    step: { type: "string" }, result: { type: "string" }, "remote-effect": { type: "string", multiple: true },
-    "wall-minutes": { type: "string" }, "token-limit": { type: "string" }, "cost-limit": { type: "string" },
+    title: { type: "string" },
+    brief: { type: "string" },
+    done: { type: "string" },
+    thread: { type: "string" },
+    model: { type: "string" },
+    cwd: { type: "string" },
+    pane: { type: "string" },
+    evidence: { type: "string" },
+    reason: { type: "string", multiple: true },
+    note: { type: "string" },
+    write: { type: "boolean" },
+    loop: { type: "string" },
+    to: { type: "string" },
+    text: { type: "string" },
+    edit: { type: "string" },
+    kind: { type: "string" },
+    from: { type: "string" },
+    stdin: { type: "boolean" },
+    set: { type: "string", multiple: true },
+    "dry-run": { type: "boolean" },
+    "no-socket": { type: "boolean" },
+    prepare: { type: "boolean" },
+    check: { type: "boolean" },
+    "no-open": { type: "boolean" },
+    step: { type: "string" },
+    result: { type: "string" },
+    "remote-effect": { type: "string", multiple: true },
+    "wall-minutes": { type: "string" },
+    "token-limit": { type: "string" },
+    "cost-limit": { type: "string" },
     "activity-path": { type: "string", multiple: true },
-    rule: { type: "string" }, outcome: { type: "string" }, lesson: { type: "string" },
+    rule: { type: "string" },
+    outcome: { type: "string" },
+    lesson: { type: "string" },
     global: { type: "boolean" },
-    source: { type: "string" }, open: { type: "boolean" },
+    source: { type: "string" },
+    open: { type: "boolean" },
   },
 });
 const opt = (name: string): string | undefined => {
@@ -128,7 +180,9 @@ const loopMinutes = (): number => {
   if (flags.values.loop === undefined) return 0;
   const value = opt("loop");
   const minutes = Number(value);
-  return value && Number.isFinite(minutes) && minutes >= 0 ? minutes : die("--loop must be a number of minutes, 0 or more");
+  return value && Number.isFinite(minutes) && minutes >= 0
+    ? minutes
+    : die("--loop must be a number of minutes, 0 or more");
 };
 const strings = (name: string): string[] => {
   const value = flags.values[name];
@@ -139,14 +193,22 @@ const ceiling = (name: string): number | null | undefined => {
   if (value === undefined) return undefined;
   if (value === "none") return null;
   const parsed = Number(value);
-  return value && Number.isFinite(parsed) && parsed >= 0 ? parsed : die(`--${name} must be a nonnegative number or none`);
+  return value && Number.isFinite(parsed) && parsed >= 0
+    ? parsed
+    : die(`--${name} must be a nonnegative number or none`);
 };
 
 const lane = async (k: string | undefined) => {
-  const found = k ? await deps.registry.read(k) : await deps.registry.byPane(process.env.HERDR_PANE_ID ?? "");
+  const found = k ? await deps.registry.read(k) : await deps.registry.bySession(runtimesOf(deps).selfAny(process.env));
   if (!found) return die(k ? `no registered lane "${k}"` : "no open lane is registered for this pane");
   if (statusOf(found) === "closed") return die(`lane ${found.key} is already closed`);
   return found;
+};
+
+/** Slack credentials from the environment; the cookie is optional. */
+const slackAuth = (token: string): SlackAuth => {
+  const cookie = process.env["DORI_SLACK_COOKIE"];
+  return { token, ...(cookie !== undefined ? { cookie } : {}) };
 };
 
 const every = async (minutes: number, tick: () => Promise<void>): Promise<void> => {
@@ -161,8 +223,16 @@ const every = async (minutes: number, tick: () => Promise<void>): Promise<void> 
 const guardMonitor = async (kind: MonitorKind | undefined): Promise<void> => {
   if (!IS_WINDOWS || !kind) return;
   const guard = await takeMonitor({
-    kind, stateDir: config.stateDir, pid: process.pid, env: process.env, processes: listProcesses(run), readEnv: readProcessEnv,
-    killTree: killTree(run), watchProcess: watchWinProcess, now: Date.now, out: (line) => console.log(line),
+    kind,
+    stateDir: config.stateDir,
+    pid: process.pid,
+    env: process.env,
+    processes: listProcesses(run),
+    readEnv: readProcessEnv,
+    killTree: killTree(run),
+    watchProcess: watchWinProcess,
+    now: Date.now,
+    out: (line) => console.log(line),
   });
   if (!guard) return;
   process.on("exit", () => guard.release());
@@ -190,10 +260,25 @@ try {
       break;
     }
     case "launch": {
-      const wallMinutes = ceiling("wall-minutes"), tokens = ceiling("token-limit"), costUsd = ceiling("cost-limit");
+      const wallMinutes = ceiling("wall-minutes"),
+        tokens = ceiling("token-limit"),
+        costUsd = ceiling("cost-limit");
+      const thread = opt("thread"),
+        model = opt("model"),
+        cwd = opt("cwd");
       const input: LaunchInput = {
-        key: key ?? "", title: need("title"), brief: need("brief"), done: need("done"), thread: opt("thread"), model: opt("model"), cwd: opt("cwd"),
-        budget: { ...(wallMinutes !== undefined ? { wallMinutes } : {}), ...(tokens !== undefined ? { tokens } : {}), ...(costUsd !== undefined ? { costUsd } : {}) },
+        key: key ?? "",
+        title: need("title"),
+        brief: need("brief"),
+        done: need("done"),
+        ...(thread !== undefined ? { thread } : {}),
+        ...(model !== undefined ? { model } : {}),
+        ...(cwd !== undefined ? { cwd } : {}),
+        budget: {
+          ...(wallMinutes !== undefined ? { wallMinutes } : {}),
+          ...(tokens !== undefined ? { tokens } : {}),
+          ...(costUsd !== undefined ? { costUsd } : {}),
+        },
         activityPaths: strings("activity-path"),
       };
       if (flags.values["dry-run"]) {
@@ -209,22 +294,36 @@ try {
       process.exit(r.startup.startsWith("STARTUP_OK") ? 0 : 3);
     }
     case "adopt": {
-      const l = await adoptLane(deps, { key: key ?? "", title: need("title"), brief: need("brief"), done: need("done"), thread: opt("thread"), pane: need("pane") });
+      const thread = opt("thread");
+      const l = await adoptLane(deps, {
+        key: key ?? "",
+        title: need("title"),
+        brief: need("brief"),
+        done: need("done"),
+        ...(thread !== undefined ? { thread } : {}),
+        pane: need("pane"),
+      });
       console.log(`ADOPTED ${l.key} pane=${l.pane} thread=${l.thread}`);
       break;
     }
     case "sync": {
       const r = await syncRegistry(deps, Boolean(flags.values.write));
       console.log("key | thread | pane | session | status");
-      for (const row of [...r.rows, ...r.unregistered]) console.log([row.key, row.thread, row.pane, row.session, row.status].join(" | "));
-      console.log(r.drift.length ? `DRIFT (${r.drift.length}):\n${r.drift.map((d) => `- ${d}`).join("\n")}` : "DRIFT none");
+      for (const row of [...r.rows, ...r.unregistered])
+        console.log([row.key, row.thread, row.pane, row.session, row.status].join(" | "));
+      console.log(
+        r.drift.length ? `DRIFT (${r.drift.length}):\n${r.drift.map((d) => `- ${d}`).join("\n")}` : "DRIFT none",
+      );
       console.log(flags.values.write ? "WROTE session ids" : "READ_ONLY");
       break;
     }
     case "boot": {
-      const token = process.env.DORI_SLACK_TOKEN;
-      const slack = token ? new Slack(fetchHttp, realClock, { token, cookie: process.env.DORI_SLACK_COOKIE }) : null;
-      const sessionDirs = [process.env.PI_SESSION_DIR, process.env.PI_SESSION_FILE && dirname(process.env.PI_SESSION_FILE)];
+      const token = process.env["DORI_SLACK_TOKEN"];
+      const slack = token ? new Slack(fetchHttp, realClock, slackAuth(token)) : null;
+      const sessionDirs = [
+        process.env["PI_SESSION_DIR"],
+        process.env["PI_SESSION_FILE"] && dirname(process.env["PI_SESSION_FILE"]),
+      ];
       const r = await bootCheck({
         ...deps,
         reports: new Reports(config.stateDir),
@@ -242,8 +341,7 @@ try {
       // security boundary, since it reads only $HERDR_PANE_ID (env -u gets past it) and a direct write to
       // lessons.jsonl skips the CLI.
       const paneLane = async () => {
-        const pane = process.env.HERDR_PANE_ID;
-        return pane ? await deps.registry.byPane(pane) : null;
+        return await deps.registry.bySession(runtimesOf(deps).selfAny(process.env));
       };
       switch (key) {
         case "add": {
@@ -255,15 +353,34 @@ try {
             if (opt("cwd") !== undefined) die("a --global lesson has no --cwd");
             const caller = await paneLane();
             if (caller) die(`a --global lesson is the lead's; this pane is lane ${caller.key}`);
-            console.log(JSON.stringify(lessons.add({ lane: "lead", scope: "global", rule: need("rule"), evidence: need("evidence") }, realClock.now())));
+            console.log(
+              JSON.stringify(
+                lessons.add(
+                  { lane: "lead", scope: "global", rule: need("rule"), evidence: need("evidence") },
+                  realClock.now(),
+                ),
+              ),
+            );
             break;
           }
-          const target = laneKey === undefined ? undefined : await deps.registry.read(laneKey) ?? die(`no registered lane "${laneKey}"`);
+          const target =
+            laneKey === undefined
+              ? undefined
+              : ((await deps.registry.read(laneKey)) ?? die(`no registered lane "${laneKey}"`));
           const repoLane = target ?? die("lesson add needs a lane key, or --global");
-          console.log(JSON.stringify(lessons.add({
-            lane: repoLane.key, cwd: opt("cwd") ?? repoLane.cwd ?? config.defaultCwd,
-            rule: need("rule"), evidence: need("evidence"),
-          }, realClock.now())));
+          console.log(
+            JSON.stringify(
+              lessons.add(
+                {
+                  lane: repoLane.key,
+                  cwd: opt("cwd") ?? repoLane.cwd ?? config.defaultCwd,
+                  rule: need("rule"),
+                  evidence: need("evidence"),
+                },
+                realClock.now(),
+              ),
+            ),
+          );
           break;
         }
         case "list": {
@@ -297,7 +414,15 @@ try {
       const now = realClock.now();
       switch (key) {
         case "add":
-          console.log(JSON.stringify(worklog.add(flags.positionals.slice(1).join(" ").trim() || die("worklog add needs a title"), need("source"), now)));
+          console.log(
+            JSON.stringify(
+              worklog.add(
+                flags.positionals.slice(1).join(" ").trim() || die("worklog add needs a title"),
+                need("source"),
+                now,
+              ),
+            ),
+          );
           break;
         case "next":
           console.log(JSON.stringify(worklog.next(id(), text(), now)));
@@ -311,7 +436,13 @@ try {
         case "list": {
           const read = worklog.read();
           for (const problem of [...read.problems, ...read.warnings]) console.error(`WORKLOG_WARNING ${problem}`);
-          console.log(JSON.stringify(flags.values.open ? read.items.filter((item) => item.closedAt === undefined) : read.items, null, 2));
+          console.log(
+            JSON.stringify(
+              flags.values.open ? read.items.filter((item) => item.closedAt === undefined) : read.items,
+              null,
+              2,
+            ),
+          );
           break;
         }
         default:
@@ -324,9 +455,16 @@ try {
       // parseArgs takes one value per flag; a second bare receipt would otherwise be dropped and its effect repeated later.
       const stray = flags.positionals.slice(1);
       if (stray.length) die(`checkpoint: unexpected argument ${stray[0]}; give each receipt its own --remote-effect`);
-      const result = new Checkpoints(config.stateDir).write(target.key, {
-        step: need("step"), result: need("result"), evidence: [need("evidence")], remoteEffects: strings("remote-effect"),
-      }, realClock.now());
+      const result = new Checkpoints(config.stateDir).write(
+        target.key,
+        {
+          step: need("step"),
+          result: need("result"),
+          evidence: [need("evidence")],
+          remoteEffects: strings("remote-effect"),
+        },
+        realClock.now(),
+      );
       console.log(JSON.stringify(result));
       break;
     }
@@ -337,10 +475,12 @@ try {
     }
     case "verify-pr": {
       const repo = key ?? die("verify-pr needs owner/repo and a PR number");
+      const expectedIdentity = config.repoIdentities[repo.toLowerCase()],
+        cwd = opt("cwd");
       const result = await verifyPr(repo, Number(flags.positionals[1]), run, {
-        expectedIdentity: config.repoIdentities[repo.toLowerCase()],
+        ...(expectedIdentity !== undefined ? { expectedIdentity } : {}),
         loopCount: Number(opt("loop") ?? 20),
-        cwd: opt("cwd"),
+        ...(cwd !== undefined ? { cwd } : {}),
       });
       console.log(formatVerifyPr(result));
       process.exit(result.ok ? 0 : 2);
@@ -357,22 +497,31 @@ try {
     case "close": {
       const target = await lane(key ?? die("close needs a lane key"));
       const rule = opt("lesson");
-      const r = await closeLane(deps, target, opt("note") ?? "closed by the lead",
-        rule === undefined ? undefined : { rule, evidence: opt("evidence") ?? target.done });
+      const r = await closeLane(
+        deps,
+        target,
+        opt("note") ?? "closed by the lead",
+        rule === undefined ? undefined : { rule, evidence: opt("evidence") ?? target.done },
+      );
       for (const line of r.lines) console.log(line);
       process.exit(r.closed ? 0 : 2);
     }
     case "pause":
     case "resume": {
       const act = command === "pause" ? pauseLane : resumeLane;
-      const r = await act(deps, await lane(key ?? die(`${command} needs a lane key`)), opt("note") ?? `${command}d by the lead`);
+      const r = await act(
+        deps,
+        await lane(key ?? die(`${command} needs a lane key`)),
+        opt("note") ?? `${command}d by the lead`,
+      );
       for (const line of r.lines) console.log(line);
       process.exit(r.code);
     }
     case "watch":
       console.log("LANE_WATCH_READY");
       for (;;) {
-        for (const line of await watchTick(deps).catch((e: unknown) => [`LANE_WATCH_WARN ${String(e).slice(0, 200)}`])) console.log(line);
+        for (const line of await watchTick(deps).catch((e: unknown) => [`LANE_WATCH_WARN ${String(e).slice(0, 200)}`]))
+          console.log(line);
         await Bun.sleep(30_000);
       }
     case "status": {
@@ -386,14 +535,16 @@ try {
     }
     case "freshness":
       await every(loopMinutes(), async () => {
-        for (const a of await freshnessTick(deps, homedir())) console.log(`${a.kind.toUpperCase()} ${a.lane} ${a.detail}`);
+        for (const a of await freshnessTick(deps, homedir()))
+          console.log(`${a.kind.toUpperCase()} ${a.lane} ${a.detail}`);
       });
       break;
     case "dead-panes": {
       const seen = new Set<string>();
       const paneState = newDeadPaneState();
       await every(loopMinutes(), async () => {
-        for (const line of await deadPaneTick(run, config, seen, new Date().toISOString().slice(0, 13), paneState)) console.log(line);
+        for (const line of await deadPaneTick(run, config, seen, new Date().toISOString().slice(0, 13), paneState))
+          console.log(line);
       });
       break;
     }
@@ -414,9 +565,25 @@ try {
       const launch = resolveCommand(cmd);
       const resolved = "refused" in launch ? die(launch.refused, 126) : launch;
       const load = async () => (await sampleHost(run)).load1;
-      const slot = await acquireSlot({ dir: `${config.stateDir}/heavy`, slots: config.heavySlots, maxLoad: config.heavyMaxLoad, clock: realClock, load, alive: pidAlive, pid: process.pid }, label ?? "");
+      const slot = await acquireSlot(
+        {
+          dir: `${config.stateDir}/heavy`,
+          slots: config.heavySlots,
+          maxLoad: config.heavyMaxLoad,
+          clock: realClock,
+          load,
+          alive: pidAlive,
+          pid: process.pid,
+        },
+        label ?? "",
+      );
       try {
-        const child = Bun.spawn([...resolved.argv], { stdout: "inherit", stderr: "inherit", stdin: "inherit", windowsVerbatimArguments: resolved.verbatim });
+        const child = Bun.spawn([...resolved.argv], {
+          stdout: "inherit",
+          stderr: "inherit",
+          stdin: "inherit",
+          windowsVerbatimArguments: resolved.verbatim,
+        });
         process.exitCode = await child.exited;
       } finally {
         releaseSlot(slot);
@@ -436,7 +603,13 @@ try {
       const edit = opt("edit");
       const token = (name: string) => process.env[name] ?? die(`${name} is not set`);
       if (platform === "slack") {
-        const slack = new Slack(fetchHttp, realClock, { token: token("DORI_SLACK_TOKEN"), cookie: process.env.DORI_SLACK_COOKIE }, undefined, new ThreadLedger(`${config.stateDir}/slack-threads.json`));
+        const slack = new Slack(
+          fetchHttp,
+          realClock,
+          slackAuth(token("DORI_SLACK_TOKEN")),
+          undefined,
+          new ThreadLedger(`${config.stateDir}/slack-threads.json`),
+        );
         if (edit) await slack.edit(to, edit, text);
         else console.log(`SENT ${(await slack.post(to, text, thread)).ts}`);
       } else if (platform === "telegram") {
@@ -453,22 +626,41 @@ try {
     }
     case "presence": {
       if (key === "slack") {
-        const auth = { token: process.env.DORI_SLACK_TOKEN ?? die("DORI_SLACK_TOKEN is not set"), cookie: process.env.DORI_SLACK_COOKIE ?? die("DORI_SLACK_COOKIE is not set (user-token presence needs the d cookie)") };
-        const p = slackPresence(new Slack(fetchHttp, realClock, auth), (url, headers) => {
-          const options: Bun.WebSocketOptions = { headers: { ...headers } };
-          const ws = new WebSocket(url, options);
-          return { isOpen: () => ws.readyState === WebSocket.OPEN, send: (f) => ws.send(f), close: () => ws.close() };
-        }, auth);
+        const auth = {
+          token: process.env["DORI_SLACK_TOKEN"] ?? die("DORI_SLACK_TOKEN is not set"),
+          cookie:
+            process.env["DORI_SLACK_COOKIE"] ??
+            die("DORI_SLACK_COOKIE is not set (user-token presence needs the d cookie)"),
+        };
+        const p = slackPresence(
+          new Slack(fetchHttp, realClock, auth),
+          (url, headers) => {
+            const options: Bun.WebSocketOptions = { headers: { ...headers } };
+            const ws = new WebSocket(url, options);
+            return { isOpen: () => ws.readyState === WebSocket.OPEN, send: (f) => ws.send(f), close: () => ws.close() };
+          },
+          auth,
+        );
         console.log("PRESENCE_READY slack");
         await every(1, async () => console.log(`PRESENCE slack ${await p.hold()}`));
       } else if (key === "discord") {
-        const token = process.env.DORI_DISCORD_TOKEN ?? die("DORI_DISCORD_TOKEN is not set");
-        discordPresence(() => {
-          const ws = new WebSocket("wss://gateway.discord.gg/?v=10&encoding=json");
-          let handler: (d: string) => void = () => {};
-          ws.addEventListener("message", (e) => handler(String(e.data)));
-          return { send: (d) => ws.send(d), close: () => ws.close(), onMessage: (cb) => { handler = cb; } };
-        }, token, realTimers);
+        const token = process.env["DORI_DISCORD_TOKEN"] ?? die("DORI_DISCORD_TOKEN is not set");
+        discordPresence(
+          () => {
+            const ws = new WebSocket("wss://gateway.discord.gg/?v=10&encoding=json");
+            let handler: (d: string) => void = () => {};
+            ws.addEventListener("message", (e) => handler(String(e.data)));
+            return {
+              send: (d) => ws.send(d),
+              close: () => ws.close(),
+              onMessage: (cb) => {
+                handler = cb;
+              },
+            };
+          },
+          token,
+          realTimers,
+        );
         console.log("PRESENCE_READY discord");
         await new Promise(() => {});
       } else die("presence needs slack or discord");
@@ -477,7 +669,11 @@ try {
     case "inbound": {
       const minutes = loopMinutes();
       if (key === "telegram") {
-        const tg = new Telegram(fetchHttp, realClock, process.env.DORI_TELEGRAM_TOKEN ?? die("DORI_TELEGRAM_TOKEN is not set"));
+        const tg = new Telegram(
+          fetchHttp,
+          realClock,
+          process.env["DORI_TELEGRAM_TOKEN"] ?? die("DORI_TELEGRAM_TOKEN is not set"),
+        );
         const store = fileTgInboundStore(`${config.stateDir}/telegram-offset`);
         const num = (name: string): number => {
           try {
@@ -487,14 +683,19 @@ try {
           }
         };
         const ownerId = num(telegramOwnerVar(process.env));
-        const groupChatId = process.env.DORI_TELEGRAM_GROUP_ID === undefined ? undefined : num("DORI_TELEGRAM_GROUP_ID");
-        const topicId = process.env.DORI_TELEGRAM_TOPIC_ID === undefined ? undefined : num("DORI_TELEGRAM_TOPIC_ID");
+        const groupChatId =
+          process.env["DORI_TELEGRAM_GROUP_ID"] === undefined ? undefined : num("DORI_TELEGRAM_GROUP_ID");
+        const topicId = process.env["DORI_TELEGRAM_TOPIC_ID"] === undefined ? undefined : num("DORI_TELEGRAM_TOPIC_ID");
         console.log(`INBOUND_READY telegram owner=${ownerId} group=${groupChatId ?? "-"} topic=${topicId ?? "-"}`);
         // Full text, JSON-escaped on one line: getUpdates cannot fetch a message twice.
         await telegramInboundLoop(
           tg,
           store,
-          { ownerId, groupChatId, topicId },
+          {
+            ownerId,
+            ...(groupChatId !== undefined ? { groupChatId } : {}),
+            ...(topicId !== undefined ? { topicId } : {}),
+          },
           minutes,
           (i) =>
             console.log(
@@ -506,13 +707,16 @@ try {
         break;
       }
       if (key !== "slack") die("inbound supports slack or telegram");
-      const auth = { token: process.env.DORI_SLACK_TOKEN ?? die("DORI_SLACK_TOKEN is not set"), cookie: process.env.DORI_SLACK_COOKIE };
+      const auth = slackAuth(process.env["DORI_SLACK_TOKEN"] ?? die("DORI_SLACK_TOKEN is not set"));
       const ledger = new ThreadLedger(`${config.stateDir}/slack-threads.json`);
       const slack = new Slack(fetchHttp, realClock, auth, undefined, ledger);
-      const me = String((await slack.call("auth.test", {})).user_id ?? die("auth.test returned no user_id"));
+      const me = String((await slack.call("auth.test", {}))["user_id"] ?? die("auth.test returned no user_id"));
       console.log("INBOUND_READY slack");
       await every(minutes, async () => {
-        for (const i of await pollSlackInbound(slack, ledger, { selfUserId: me })) console.log(`INBOUND ${i.source} ${i.channel} ${i.threadTs ?? "-"} ${i.ts || "-"} ${i.user ?? "-"} ${JSON.stringify((i.text ?? "").slice(0, 200))}`);
+        for (const i of await pollSlackInbound(slack, ledger, { selfUserId: me }))
+          console.log(
+            `INBOUND ${i.source} ${i.channel} ${i.threadTs ?? "-"} ${i.ts || "-"} ${i.user ?? "-"} ${JSON.stringify((i.text ?? "").slice(0, 200))}`,
+          );
       });
       break;
     }
@@ -522,7 +726,8 @@ try {
         for (const l of st.lines) console.log(l);
         process.exit(st.ready ? 0 : 3);
       }
-      const usage = "usage: dori setup <slack|telegram|discord> [--prepare [--no-open] | --check | --from FILE | --stdin | --from-command -- CMD ...] [--set KEY=VALUE ...] [--dry-run] [--no-socket]; dori setup aside";
+      const usage =
+        "usage: dori setup <slack|telegram|discord> [--prepare [--no-open] | --check | --from FILE | --stdin | --from-command -- CMD ...] [--set KEY=VALUE ...] [--dry-run] [--no-socket]; dori setup aside";
       if (!(MESSENGERS as readonly string[]).includes(key ?? "")) die(usage);
       const m = key as Messenger;
       const envPath = envFilePath(homedir(), m);
@@ -531,7 +736,8 @@ try {
       if (flags.values.prepare) {
         const file = join(doriDir, `${m}-setup.txt`);
         mkdirSync(doriDir, { recursive: true });
-        const pasted = existsSync(file) && Object.keys(parseSetupInput(readFileSync(file, "utf8"), m).values).length > 0;
+        const pasted =
+          existsSync(file) && Object.keys(parseSetupInput(readFileSync(file, "utf8"), m).values).length > 0;
         if (!pasted) writeFileSync(file, setupTemplate(m), { mode: 0o600 });
         await protect(file);
         console.log(`PREPARED ${file} (only this user can read it)`);
@@ -544,9 +750,12 @@ try {
       }
       if (flags.values.check) {
         const have = existsSync(envPath) ? parseEnvText(readFileSync(envPath, "utf8")) : {};
-        for (const k of requiredKeys(m, have)) console.log(`${have[k] ? "HAVE   " : "MISSING"} ${k}${have[k] ? ` ${maskValue(k, have[k]!)}` : ""}`);
+        for (const k of requiredKeys(m, have))
+          console.log(`${have[k] ? "HAVE   " : "MISSING"} ${k}${have[k] ? ` ${maskValue(k, have[k]!)}` : ""}`);
         const missing = missingKeys(m, have);
-        console.log(missing.length ? `ENV_INCOMPLETE ${envPath} missing: ${missing.join(", ")}` : `ENV_COMPLETE ${envPath}`);
+        console.log(
+          missing.length ? `ENV_INCOMPLETE ${envPath} missing: ${missing.join(", ")}` : `ENV_COMPLETE ${envPath}`,
+        );
         process.exit(missing.length ? 2 : 0);
       }
       const from = opt("from");
@@ -558,22 +767,34 @@ try {
       if (fromCommand.length) {
         const launch = resolveCommand(fromCommand);
         const resolved = "refused" in launch ? die(launch.refused, 126) : launch;
-        const child = Bun.spawn([...resolved.argv], { stdin: "ignore", stdout: "pipe", stderr: "pipe", windowsVerbatimArguments: resolved.verbatim });
+        const child = Bun.spawn([...resolved.argv], {
+          stdin: "ignore",
+          stdout: "pipe",
+          stderr: "pipe",
+          windowsVerbatimArguments: resolved.verbatim,
+        });
         const [out, err] = await Promise.all([new Response(child.stdout).text(), new Response(child.stderr).text()]);
         const code = await child.exited;
-        for (const l of err.split(/\r?\n/).filter((x) => x.trim()).slice(-20)) console.log(scrubTokens(`COMMAND  ${l.trim()}`).slice(0, 300));
+        for (const l of err
+          .split(/\r?\n/)
+          .filter((x) => x.trim())
+          .slice(-20))
+          console.log(scrubTokens(`COMMAND  ${l.trim()}`).slice(0, 300));
         if (code !== 0) die(`FROM_COMMAND_FAILED exit ${code}; its output was not used`);
         text = out;
       } else if (flags.values.stdin) text = await Bun.stdin.text();
       else if (fromPath) text = readFileSync(fromPath, "utf8");
       const parsed = parseSetupInput(text, m);
-      for (const n of parsed.ignoredLines) console.log(`IGNORED  input line ${n} (not KEY=VALUE and no token; its content is not shown)`);
+      for (const n of parsed.ignoredLines)
+        console.log(`IGNORED  input line ${n} (not KEY=VALUE and no token; its content is not shown)`);
       const sets: Record<string, string> = {};
       for (const kv of (flags.values.set as string[] | undefined) ?? []) {
         const i = kv.indexOf("=");
         const k = i > 0 ? kv.slice(0, i).trim() : "";
-        if (SECRET_KEYS.has(k)) die(`${k} is never taken from the command line; use --from FILE, --stdin or --from-command`);
-        if (!KEYS[m].includes(k)) die(`--set takes KEY=VALUE with KEY one of ${KEYS[m].filter((x) => !SECRET_KEYS.has(x)).join(", ")}`);
+        if (SECRET_KEYS.has(k))
+          die(`${k} is never taken from the command line; use --from FILE, --stdin or --from-command`);
+        if (!KEYS[m].includes(k))
+          die(`--set takes KEY=VALUE with KEY one of ${KEYS[m].filter((x) => !SECRET_KEYS.has(x)).join(", ")}`);
         sets[k] = kv.slice(i + 1).trim();
       }
       const dryRun = Boolean(flags.values["dry-run"]);
@@ -585,9 +806,9 @@ try {
         {
           http: fetchHttp,
           api: {
-            slack: process.env.DORI_SLACK_API ?? "https://slack.com/api",
-            telegram: process.env.DORI_TELEGRAM_API ?? "https://api.telegram.org",
-            discord: process.env.DORI_DISCORD_API ?? "https://discord.com/api/v10",
+            slack: process.env["DORI_SLACK_API"] ?? "https://slack.com/api",
+            telegram: process.env["DORI_TELEGRAM_API"] ?? "https://api.telegram.org",
+            discord: process.env["DORI_DISCORD_API"] ?? "https://discord.com/api/v10",
           },
           socketHello: (url) => realSocketHello(url),
           protect,
@@ -607,10 +828,15 @@ try {
           dryRun,
           noSocket: Boolean(flags.values["no-socket"]),
           autostart: config.hooks.autostart ? fill(config.hooks.autostart, { src, home: homedir() }) : undefined,
-          listenerScript: listener.toLowerCase().startsWith(home.toLowerCase()) ? `~${listener.slice(home.length)}` : listener,
+          listenerScript: listener.toLowerCase().startsWith(home.toLowerCase())
+            ? `~${listener.slice(home.length)}`
+            : listener,
         },
       );
-      const savedTokens = !dryRun && result.code !== 1 && Object.keys(parsed.values).some((k) => SECRET_KEYS.has(k) && result.values[k] === parsed.values[k]);
+      const savedTokens =
+        !dryRun &&
+        result.code !== 1 &&
+        Object.keys(parsed.values).some((k) => SECRET_KEYS.has(k) && result.values[k] === parsed.values[k]);
       if (fromPath && savedTokens) {
         rmSync(fromPath, { force: true });
         console.log(`REMOVED  ${fromPath} (the tokens now live only in ${m}.env)`);
@@ -625,6 +851,16 @@ try {
       process.exit(command ? 1 : 0);
   }
 } catch (e) {
-  if (e instanceof LaunchError || e instanceof UnsafeMessageError || e instanceof MessengerError || e instanceof TranscriptionError || e instanceof ReportError || e instanceof CheckpointError || e instanceof LessonError || e instanceof WorklogError) die(e.message);
+  if (
+    e instanceof LaunchError ||
+    e instanceof UnsafeMessageError ||
+    e instanceof MessengerError ||
+    e instanceof TranscriptionError ||
+    e instanceof ReportError ||
+    e instanceof CheckpointError ||
+    e instanceof LessonError ||
+    e instanceof WorklogError
+  )
+    die(e.message);
   throw e;
 }

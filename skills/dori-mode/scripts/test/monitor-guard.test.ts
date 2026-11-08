@@ -2,7 +2,18 @@ import { expect, test } from "bun:test";
 import { existsSync, mkdirSync, writeFileSync } from "node:fs";
 import { dirname } from "node:path";
 
-import { commandKind, type Env, type GuardDeps, lockPath, monitorChain, monitorStatus, readLock, scanMonitors, takeMonitor, watchWinProcess } from "../src/monitor-guard.ts";
+import {
+  commandKind,
+  type Env,
+  type GuardDeps,
+  lockPath,
+  monitorChain,
+  monitorStatus,
+  readLock,
+  scanMonitors,
+  takeMonitor,
+  watchWinProcess,
+} from "../src/monitor-guard.ts";
 import type { WinProc } from "../src/win-process.ts";
 import { withState } from "./fakes.ts";
 
@@ -18,7 +29,12 @@ const armed = (base: number, kind = "watch", extra = ""): WinProc[] => {
     { pid: base + 1, ppid: base, cmd: `C:\\Users\\u\\.bun\\bin\\dori.exe ${args}`, startedAt: base * 10 + 1 },
     { pid: base + 2, ppid: base + 1, cmd: `bun "${CLI}" ${args}`, startedAt: base * 10 + 2 },
     { pid: base + 3, ppid: base + 2, cmd: `"mise" x -- bun ${CLI} ${args}`, startedAt: base * 10 + 3 },
-    { pid: base + 4, ppid: base + 3, cmd: `"C:\\Users\\u\\AppData\\Local\\mise\\installs\\bun\\latest\\bin\\bun.exe" ${CLI} ${args}`, startedAt: base * 10 + 4 },
+    {
+      pid: base + 4,
+      ppid: base + 3,
+      cmd: `"C:\\Users\\u\\AppData\\Local\\mise\\installs\\bun\\latest\\bin\\bun.exe" ${CLI} ${args}`,
+      startedAt: base * 10 + 4,
+    },
   ];
 };
 
@@ -27,7 +43,10 @@ type Harness = { deps: GuardDeps; killed: number[]; lines: string[]; gone: Set<n
 const harness = (stateDir: string, table: WinProc[], self: number, envs: Record<number, Env>): Harness => {
   const h: Harness = { killed: [], lines: [], gone: new Set(), table, deps: undefined as unknown as GuardDeps };
   h.deps = {
-    kind: "watch", stateDir, pid: self, env: envs[self] ?? {},
+    kind: "watch",
+    stateDir,
+    pid: self,
+    env: envs[self] ?? {},
     processes: async () => h.table,
     readEnv: (pid) => envs[pid],
     killTree: async (pid) => void h.killed.push(pid),
@@ -54,7 +73,11 @@ test("commandKind: watch always, the other kinds only with a loop, other command
 
 test("monitorChain walks dori.exe, the bun launcher and the mise hop up to the arming shell", () => {
   expect(monitorChain(armed(100), 104)).toEqual({
-    chain: [{ pid: 103, startedAt: 1003 }, { pid: 102, startedAt: 1002 }, { pid: 101, startedAt: 1001 }],
+    chain: [
+      { pid: 103, startedAt: 1003 },
+      { pid: 102, startedAt: 1002 },
+      { pid: 101, startedAt: 1001 },
+    ],
     parent: { pid: 100, startedAt: 1000 },
   });
 });
@@ -68,13 +91,21 @@ test("monitorChain: a Git Bash fork (same command line under itself) is watched 
 test("monitorChain: a parent pid now held by a newer process means the arming shell is gone", () => {
   const table = armed(100).map((p) => (p.pid === 100 ? { ...p, cmd: "notepad.exe", startedAt: 99_999 } : p));
   expect(monitorChain(table, 104).parent).toBeUndefined();
-  expect(monitorChain(armed(100).filter((p) => p.pid !== 100), 104).parent).toBeUndefined();
+  expect(
+    monitorChain(
+      armed(100).filter((p) => p.pid !== 100),
+      104,
+    ).parent,
+  ).toBeUndefined();
 });
 
 test("scanMonitors lists one instance per chain, with its home, and skips a process whose env is unreadable", () => {
   const table = [...armed(100), ...armed(200), ...armed(300, "freshness", " --loop 5")];
-  const found = scanMonitors(table, (pid) => ({ 104: HOME_A, 204: HOME_B } as Record<number, Env>)[pid]);
-  expect(found.map((i) => [i.pid, i.kind, i.parent?.pid])).toEqual([[104, "watch", 100], [204, "watch", 200]]);
+  const found = scanMonitors(table, (pid) => (({ 104: HOME_A, 204: HOME_B }) as Record<number, Env>)[pid]);
+  expect(found.map((i) => [i.pid, i.kind, i.parent?.pid])).toEqual([
+    [104, "watch", 100],
+    [204, "watch", 200],
+  ]);
   expect(found[0]?.home).not.toBe(found[1]?.home);
 });
 
@@ -82,7 +113,13 @@ test("takeMonitor stops a live lock holder's whole tree from its outermost wrapp
   const s = withState();
   try {
     const h = harness(s.dir, [...armed(100), ...armed(200)], 204, { 104: HOME_A, 204: HOME_A });
-    writeLock(lockPath(s.dir, "watch"), { kind: "watch", pid: 104, startedAt: 1004, chain: monitorChain(h.table, 104).chain, at: "x" });
+    writeLock(lockPath(s.dir, "watch"), {
+      kind: "watch",
+      pid: 104,
+      startedAt: 1004,
+      chain: monitorChain(h.table, 104).chain,
+      at: "x",
+    });
     const g = await takeMonitor(h.deps);
     expect(h.killed).toEqual([101]);
     expect(g?.replaced).toEqual([104]);
@@ -94,7 +131,10 @@ test("takeMonitor stops a live lock holder's whole tree from its outermost wrapp
 });
 
 test("takeMonitor replaces a stale lock (holder gone, or its pid reused) without stopping anything", async () => {
-  for (const holder of [{ pid: 999, startedAt: 9990 }, { pid: 101, startedAt: 5 }]) {
+  for (const holder of [
+    { pid: 999, startedAt: 9990 },
+    { pid: 101, startedAt: 5 },
+  ]) {
     const s = withState();
     try {
       const h = harness(s.dir, armed(200), 204, { 204: HOME_A });
@@ -112,7 +152,11 @@ test("takeMonitor replaces a stale lock (holder gone, or its pid reused) without
 test("takeMonitor stops a same-home instance that holds no lock (an older dori) but never another home's", async () => {
   const s = withState();
   try {
-    const h = harness(s.dir, [...armed(100), ...armed(200), ...armed(300)], 304, { 104: HOME_A, 204: HOME_B, 304: HOME_A });
+    const h = harness(s.dir, [...armed(100), ...armed(200), ...armed(300)], 304, {
+      104: HOME_A,
+      204: HOME_B,
+      304: HOME_A,
+    });
     await takeMonitor(h.deps);
     expect(h.killed).toEqual([101]);
   } finally {
@@ -141,7 +185,12 @@ test("check: exits when the arming shell is gone or another instance took the lo
 test("release removes the lock this instance holds; an orphan (no arming shell) is told to exit at once", async () => {
   const s = withState();
   try {
-    const h = harness(s.dir, armed(100).filter((p) => p.pid !== 100), 104, { 104: HOME_A });
+    const h = harness(
+      s.dir,
+      armed(100).filter((p) => p.pid !== 100),
+      104,
+      { 104: HOME_A },
+    );
     const g = await takeMonitor(h.deps);
     expect(g?.check()).toBe("parent unknown is gone");
     g?.release();
@@ -169,7 +218,9 @@ test("monitorStatus warns MONITOR_DUPLICATE only for this home's kinds that run 
     const envs: Record<number, Env> = { 104: HOME_A, 204: HOME_A, 304: HOME_B, 404: HOME_A };
     const r = monitorStatus(table, (pid) => envs[pid], HOME_A, s.dir);
     expect(r.duplicates).toBe(1);
-    expect(r.lines.filter((l) => l.startsWith("MONITOR_DUPLICATE"))).toEqual(["MONITOR_DUPLICATE watch 2 instances for this home: 104, 204"]);
+    expect(r.lines.filter((l) => l.startsWith("MONITOR_DUPLICATE"))).toEqual([
+      "MONITOR_DUPLICATE watch 2 instances for this home: 104, 204",
+    ]);
     expect(r.lines).toContain("MONITOR freshness none");
     expect(monitorStatus(table, (pid) => envs[pid], HOME_B, s.dir).duplicates).toBe(0);
   } finally {
@@ -177,13 +228,16 @@ test("monitorStatus warns MONITOR_DUPLICATE only for this home's kinds that run 
   }
 });
 
-test.if(process.platform === "win32")("watchWinProcess: running, exited, and a pid whose start time does not match", async () => {
-  const child = Bun.spawn(["cmd", "/c", "more"], { stdin: "pipe", stdout: "ignore" });
-  const alive = watchWinProcess({ pid: child.pid });
-  expect(alive()).toBe(false);
-  expect(watchWinProcess({ pid: child.pid, startedAt: 1 })()).toBe(true);
-  child.stdin.end();
-  await child.exited;
-  expect(alive()).toBe(true);
-  expect(watchWinProcess({ pid: 999_999 })()).toBe(true);
-});
+test.if(process.platform === "win32")(
+  "watchWinProcess: running, exited, and a pid whose start time does not match",
+  async () => {
+    const child = Bun.spawn(["cmd", "/c", "more"], { stdin: "pipe", stdout: "ignore" });
+    const alive = watchWinProcess({ pid: child.pid });
+    expect(alive()).toBe(false);
+    expect(watchWinProcess({ pid: child.pid, startedAt: 1 })()).toBe(true);
+    child.stdin.end();
+    await child.exited;
+    expect(alive()).toBe(true);
+    expect(watchWinProcess({ pid: 999_999 })()).toBe(true);
+  },
+);

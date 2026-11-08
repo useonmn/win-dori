@@ -6,12 +6,7 @@
   "ignorePanes": [],
   "leadPane": "",
   "defaultCwd": "~",
-  "agentCommand": [
-    "omo",
-    "--model",
-    "{model}",
-    "{prompt}"
-  ],
+  "agentCommand": ["omo", "--model", "{model}", "{prompt}"],
   "paneShell": "auto",
   "defaultModel": "anthropic/claude-opus-5-5",
   "launchKeywords": "ulw set goal and work",
@@ -21,10 +16,7 @@
   "closeAfterMin": 5,
   "heavySlots": 1,
   "heavyMaxLoad": 80,
-  "deadPanePatterns": [
-    "has stopped",
-    "no suitable jobs"
-  ],
+  "deadPanePatterns": ["has stopped", "no suitable jobs"],
   "guard": {
     "loadAlert": 150,
     "loadOk": 80,
