@@ -6,6 +6,7 @@ import { done, ready, report, startLane } from "./lanes.ts";
 import { mergeGate, review } from "./gate.ts";
 import { defaultDeps, Refusal, send, ROLES, type Deps, type SendResult } from "./harness.ts";
 import { spawnExec } from "./herdr.ts";
+import { ConfigError, hooksSettled } from "./hooks.ts";
 import { inboxList, releaseHeld, sendToShell } from "./inbox.ts";
 import { resolveShell } from "./shell.ts";
 import type { Role } from "./store-types.ts";
@@ -200,10 +201,11 @@ if (import.meta.main) {
   try {
     code = await main(process.argv.slice(2), deps);
   } catch (e) {
-    if (!(e instanceof Refusal)) throw e;
+    if (!(e instanceof Refusal || e instanceof ConfigError)) throw e;
     console.error(e.message);
     code = 2;
   } finally {
+    await hooksSettled();
     await deps.usage.flush(2000);
   }
   process.exit(code);

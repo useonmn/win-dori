@@ -2,6 +2,7 @@ import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { prompt, Refusal, settled, tellLead, type Deps, type SendResult } from "./harness.ts";
 import { appendArg, paneShell } from "./shell.ts";
+import { runHook } from "./hooks.ts";
 import { KEY_RE, reservedKey, type Lane } from "./store-types.ts";
 
 export async function startLane(
@@ -70,6 +71,7 @@ export async function report(
   lane.nudges = 0;
   if (status) lane.status = status;
   d.store.saveLane(lane);
+  void runHook(d, "onReport", { key, text, evidence: "" });
   return settled(tellLead(d, `[REPORT ${key}${status === "waiting" ? " WAITING" : ""}] ${text}`, key));
 }
 
@@ -89,6 +91,7 @@ export async function ready(
   lane.log.push({ at: now, kind: "ready", text });
   d.store.saveLane(lane);
   const sent = await settled(tellLead(d, `[READY ${key}] ${text}\nevidence: ${evidence.join(" ")}`, key));
+  void runHook(d, "onReady", { key, text, evidence: evidence.join(" ") });
   d.usage.record({
     name: "dori.lane_ready",
     evidence_count: Math.min(evidence.length, 100),

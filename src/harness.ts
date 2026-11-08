@@ -43,8 +43,11 @@ export const defaultDeps = (shell: PaneShell = "posix"): Deps => {
 
 export class Refusal extends Error {}
 
+/** `DORI_PROMPTS_DIR` when set, else the repo's `prompts/`. */
+export const promptsDir = (): string => process.env["DORI_PROMPTS_DIR"] || PROMPTS;
+
 export const prompt = (name: string, vars: Record<string, string>): string =>
-  readFileSync(join(PROMPTS, name), "utf8").replace(/\{\{(\w+)\}\}/g, (_, k: string) => vars[k] ?? `{{${k}}}`);
+  readFileSync(join(promptsDir(), name), "utf8").replace(/\{\{(\w+)\}\}/g, (_, k: string) => vars[k] ?? `{{${k}}}`);
 
 export function resolveTarget(d: Deps, target: string): string {
   if (/^w[0-9A-Za-z]+:p[0-9A-Za-z]+$/.test(target)) return target;
