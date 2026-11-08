@@ -66,6 +66,12 @@ describe("interactiveShellInFront (#66), ported from the herdr parser", () => {
     ["busybox running a command applet: busybox sh -c", [p("busybox", "busybox", "sh", "-c", "x")], false],
     ["hc group leader only: an agent", [{ name: "omo", argv: ["omo"], pid: 4242 }], false],
     ["hc group leader only: a bare shell", [{ name: "bash", argv: ["bash"], pid: 4242 }], true],
+    ["Windows: pwsh.exe by its full path", [p("C:\\Program Files\\PowerShell\\7\\pwsh.exe", "pwsh.exe")], true],
+    ["Windows: powershell.exe -Command", [p("powershell.exe", "powershell.exe", "-Command", "ls")], false],
+    ["Windows: a bare cmd.exe prompt", [p("C:\\WINDOWS\\system32\\cmd.exe", "cmd.exe")], true],
+    ["Windows: cmd /c runs a command", [p("cmd.exe", "cmd.exe", "/C", "dir")], false],
+    ["Windows: cmd /k keeps its prompt", [p("cmd.exe", "cmd.exe", "/k", "dir")], true],
+    ["Windows: an agent exe is no shell", [p("C:\\tools\\omo.exe", "omo.exe")], false],
   ] as const)("%s", (_, procs, want) => {
     expect(interactiveShellInFront(procs)).toBe(want);
   });
@@ -76,7 +82,7 @@ describe("interactiveShellInFront (#66), ported from the herdr parser", () => {
   });
 
   test("SHELLS covers the busybox and PowerShell names", () => {
-    for (const name of ["sh", "bash", "zsh", "fish", "busybox", "pwsh", "powershell"])
+    for (const name of ["sh", "bash", "zsh", "fish", "busybox", "pwsh", "powershell", "cmd"])
       expect(SHELLS.has(name)).toBe(true);
     expect(SHELLS.has("omo")).toBe(false);
   });

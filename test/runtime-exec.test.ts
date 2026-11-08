@@ -21,7 +21,8 @@ describe("groupId", () => {
 
   test("a symlinked store root shares the target's group", () => {
     const dir = mkdtempSync(join(tmpdir(), "dori-group-"));
-    symlinkSync(dir, `${dir}-link`);
+    // A directory junction needs no symlink privilege on Windows; elsewhere the type is ignored.
+    symlinkSync(dir, `${dir}-link`, "junction");
     expect(groupId(`${dir}-link`)).toBe(groupId(dir));
   });
 });

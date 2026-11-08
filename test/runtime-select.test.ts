@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { chmodSync, mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { delimiter, join } from "node:path";
 import { ConfigError, RuntimeChoiceError, readRuntimeChoice } from "../src/runtime/select.ts";
 
 const scratch = (): string => mkdtempSync(join(tmpdir(), "dori-select-"));
@@ -12,17 +12,19 @@ const config = (text: string): string => {
   return path;
 };
 const NO_CONFIG = "/nonexistent/dori/config.json";
+const win = process.platform === "win32";
+const escapeRegex = (s: string): string => s.replace(/[\\^$.*+?()[\]{}|]/g, "\\$&");
 
 const pathWith = (...bins: string[]): string => {
   const dirs = bins.map((bin) => {
     const dir = join(scratch(), "bin");
     mkdirSync(dir);
-    const file = join(dir, bin);
+    const file = join(dir, win ? `${bin}.exe` : bin);
     writeFileSync(file, "#!/bin/sh\n");
     chmodSync(file, 0o755);
     return dir;
   });
-  return [join(scratch(), "empty"), ...dirs].join(":");
+  return [join(scratch(), "empty"), ...dirs].join(delimiter);
 };
 
 describe("readRuntimeChoice precedence", () => {
@@ -111,7 +113,7 @@ describe("readRuntimeChoice refusals", () => {
   test('config value "tmux": ConfigError naming the file and the value', () => {
     const configPath = config('{"runtime":"tmux"}');
     expect(() => readRuntimeChoice({ env: { DORI_RUNTIME: "" }, configPath })).toThrow(ConfigError);
-    expect(() => readRuntimeChoice({ env: {}, configPath })).toThrow(new RegExp(`${configPath}.*"tmux"`));
+    expect(() => readRuntimeChoice({ env: {}, configPath })).toThrow(new RegExp(`${escapeRegex(configPath)}.*"tmux"`));
   });
 
   test("a non-string runtime value is a ConfigError too", () => {
@@ -149,7 +151,7 @@ describe("readRuntimeChoice PATH detection is injectable", () => {
       asked.push(path);
       return path === "/b/hc";
     };
-    expect(readRuntimeChoice({ env: { PATH: "/a:/b" }, configPath: NO_CONFIG, exists })).toEqual({
+    expect(readRuntimeChoice({ env: { PATH: "/a:/b" }, configPath: NO_CONFIG, exists, windows: false })).toEqual({
       kind: "hc",
       source: "detect:path",
     });
@@ -163,9 +165,32 @@ describe("readRuntimeChoice PATH detection is injectable", () => {
       asked.push(path);
       return false;
     };
-    expect(() => readRuntimeChoice({ env: { PATH: ":/a:" }, configPath: NO_CONFIG, exists })).toThrow(
+    expect(() => readRuntimeChoice({ env: { PATH: ":/a:" }, configPath: NO_CONFIG, exists, windows: false })).toThrow(
       RuntimeChoiceError,
     );
     expect(asked.every((p) => p.startsWith("/a/"))).toBe(true);
+  });
+
+  test("on Windows: Path in any case, ; between directories, and a command is name + a PATHEXT extension", () => {
+    const asked: string[] = [];
+    const exists = (path: string): boolean => {
+      asked.push(path);
+      return path === "C:\\b\\hc.EXE";
+    };
+    const env = { Path: "C:\\a;;C:\\b", PATHEXT: ".EXE;.CMD" };
+    expect(readRuntimeChoice({ env, configPath: NO_CONFIG, exists, windows: true })).toEqual({
+      kind: "hc",
+      source: "detect:path",
+    });
+    expect(asked).toContain("C:\\a\\herdr.EXE");
+    expect(asked).toContain("C:\\a\\herdr.CMD");
+    expect(asked).not.toContain("C:\\b\\hc");
+  });
+
+  test("on Windows a bare hc file without a PATHEXT extension is no install", () => {
+    const exists = (path: string): boolean => path === "C:\\b\\hc";
+    expect(() => readRuntimeChoice({ env: { PATH: "C:\\b" }, configPath: NO_CONFIG, exists, windows: true })).toThrow(
+      RuntimeChoiceError,
+    );
   });
 });

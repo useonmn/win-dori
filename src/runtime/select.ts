@@ -1,5 +1,5 @@
 import { accessSync, constants, readFileSync, statSync } from "node:fs";
-import { delimiter, join } from "node:path";
+import { posix, win32 } from "node:path";
 import type { RuntimeKind } from "./types.ts";
 
 export type RuntimeSource = "env" | "config" | "detect:HC_TERMINAL_ID" | "detect:HERDR_PANE_ID" | "detect:path";
@@ -49,9 +49,23 @@ function configRuntime(configPath: string): RuntimeKind | undefined {
   return value;
 }
 
-function onPath(pathVar: string | undefined, exists: (path: string) => boolean): RuntimeKind[] {
-  const dirs = (pathVar ?? "").split(delimiter).filter((dir) => dir !== "");
-  return KINDS.filter((kind) => dirs.some((dir) => exists(join(dir, kind))));
+// Windows: PATH is `;`-separated, the variable may be spelled Path, and a command is found as name + one of PATHEXT
+// (hc.exe, herdr.exe); a bare `hc` file is no command there.
+const DEFAULT_PATHEXT = ".COM;.EXE;.BAT;.CMD";
+const envValue = (env: Readonly<Record<string, string | undefined>>, name: string, windows: boolean) =>
+  windows ? Object.entries(env).find(([k]) => k.toUpperCase() === name)?.[1] : env[name];
+
+function onPath(
+  env: Readonly<Record<string, string | undefined>>,
+  exists: (path: string) => boolean,
+  windows: boolean,
+): RuntimeKind[] {
+  const path = windows ? win32 : posix;
+  const dirs = (envValue(env, "PATH", windows) ?? "").split(path.delimiter).filter((dir) => dir !== "");
+  const exts = windows
+    ? (envValue(env, "PATHEXT", windows) || DEFAULT_PATHEXT).split(";").filter((ext) => ext !== "")
+    : [""];
+  return KINDS.filter((kind) => dirs.some((dir) => exts.some((ext) => exists(path.join(dir, kind + ext)))));
 }
 
 /**
@@ -63,6 +77,7 @@ export function readRuntimeChoice(options: {
   readonly env: Readonly<Record<string, string | undefined>>;
   readonly configPath: string;
   readonly exists?: (path: string) => boolean;
+  readonly windows?: boolean;
 }): RuntimeChoice {
   const { env, configPath } = options;
   const fromEnv = nonEmpty(env["DORI_RUNTIME"]);
@@ -74,7 +89,7 @@ export function readRuntimeChoice(options: {
   if (fromConfig !== undefined) return { kind: fromConfig, source: "config" };
   if (nonEmpty(env["HC_TERMINAL_ID"]) !== undefined) return { kind: "hc", source: "detect:HC_TERMINAL_ID" };
   if (nonEmpty(env["HERDR_PANE_ID"]) !== undefined) return { kind: "herdr", source: "detect:HERDR_PANE_ID" };
-  const found = onPath(env["PATH"], options.exists ?? isExecutableFile);
+  const found = onPath(env, options.exists ?? isExecutableFile, options.windows ?? process.platform === "win32");
   const [only] = found;
   if (found.length === 1 && only !== undefined) return { kind: only, source: "detect:path" };
   const why = found.length === 0 ? "neither herdr nor hc is on PATH" : "both herdr and hc are on PATH";
