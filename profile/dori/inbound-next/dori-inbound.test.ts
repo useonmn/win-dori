@@ -14,6 +14,9 @@ const procs: ReturnType<typeof Bun.spawn>[] = [];
 beforeAll(async () => {
   root = mkdtempSync(join(tmpdir(), "dori-inbound-test-"));
   // Fake herdr: appends {argv, ok} as one JSON line to FAKE_HERDR_LOG; fails while the FAKE_HERDR_FAILS counter file holds N > 0.
+  // pane get prints the agent_status held in the FAKE_HERDR_STATE file (missing: unknown); "hang" never answers, "error" exits 3.
+  // It also prints the terminal title held in FAKE_HERDR_TITLE; pane read prints the FAKE_HERDR_SCREEN file ("error" exits 3).
+  // Called as hc (--json get / --json read), it prints hc's shapes instead: the terminal record and {text}.
   const src = join(root, "fake-herdr.ts");
   writeFileSync(
     src,
@@ -25,6 +28,21 @@ let fail = false;
 if (f && existsSync(f)) { const n = parseInt(readFileSync(f, "utf8"), 10); if (n > 0) { fail = true; writeFileSync(f, String(n - 1)); } }
 appendFileSync(process.env.FAKE_HERDR_LOG!, JSON.stringify({ argv: args, ok: !fail }) + "\\n");
 if (fail) { console.error("fake failure"); process.exit(1); }
+const hc = args[0] === "--json";
+const file = (k: string, d: string) => { const p = process.env[k]; return p && existsSync(p) ? readFileSync(p, "utf8") : d; };
+if (args[1] === "get") {
+  const state = file("FAKE_HERDR_STATE", "unknown").trim();
+  const title = file("FAKE_HERDR_TITLE", "");
+  if (state === "hang") setInterval(() => {}, 1000);
+  else if (state === "error") process.exit(3);
+  else if (hc) console.log(JSON.stringify({ address: args[2], state: "live", status: state === "unknown" ? null : { state, app: "omo" }, title }));
+  else console.log(JSON.stringify({ id: "cli:pane:get", result: { type: "pane_info", pane: { pane_id: args[2], agent_status: state, terminal_title: title, terminal_title_stripped: title } } }));
+}
+if (args[1] === "read") {
+  const screen = file("FAKE_HERDR_SCREEN", "");
+  if (screen === "error") process.exit(3);
+  process.stdout.write(hc ? JSON.stringify({ text: screen, complete: true, how: "screen" }) : screen);
+}
 `,
   );
   // Run the fake through bun (DORI_HERDR as a JSON argv array): a freshly compiled unsigned exe can be blocked by Smart App Control.
@@ -62,11 +80,22 @@ function start(opts: {
   fails?: number;
   cursor?: Record<string, string>;
   env?: Record<string, string>;
+  config?: object;
+  herdrState?: string;
+  herdrTitle?: string;
+  herdrScreen?: string;
+  state?: Record<string, unknown>;
+  stdin?: boolean;
 }): Run {
   const dir = join(root, `case${++n}`);
   mkdirSync(join(dir, "state"), { recursive: true });
   writeFileSync(join(dir, "events.jsonl"), `${opts.events.map((e) => JSON.stringify(e)).join("\n")}\n`);
-  writeFileSync(join(dir, "config.json"), JSON.stringify({ leadPane: opts.pane ?? "fakeW:p1" }));
+  writeFileSync(join(dir, "config.json"), JSON.stringify({ leadPane: opts.pane ?? "fakeW:p1", ...opts.config }));
+  if (opts.herdrState) writeFileSync(join(dir, "herdr-state"), opts.herdrState);
+  if (opts.herdrTitle) writeFileSync(join(dir, "herdr-title"), opts.herdrTitle);
+  if (opts.herdrScreen) writeFileSync(join(dir, "herdr-screen"), opts.herdrScreen);
+  for (const [name, value] of Object.entries(opts.state ?? {}))
+    writeFileSync(join(dir, "state", name), JSON.stringify(value));
   if (opts.history) writeFileSync(join(dir, "history.json"), JSON.stringify(opts.history));
   if (opts.cursor) writeFileSync(join(dir, "state", "inbound-cursor.json"), JSON.stringify(opts.cursor));
   writeFileSync(join(dir, "fails"), String(opts.fails ?? 0));
@@ -83,6 +112,10 @@ function start(opts: {
     "DORI_SLACK_TIMEOUT_MS",
     "DORI_INBOUND_SUPERVISED",
     "DORI_INBOUND_LOCK_DIR",
+    "DORI_WORKING_UNKNOWN_LIMIT_MS",
+    "DORI_WORKING_GRACE_MS",
+    "DORI_HERDR_TIMEOUT_MS",
+    "DORI_RUNTIME",
   ])
     delete env[k];
   Object.assign(env, {
@@ -93,11 +126,19 @@ function start(opts: {
     DORI_SLACK_OWNER: OWNER,
     FAKE_HERDR_LOG: join(dir, "herdr.log"),
     FAKE_HERDR_FAILS: join(dir, "fails"),
+    FAKE_HERDR_STATE: join(dir, "herdr-state"),
+    FAKE_HERDR_TITLE: join(dir, "herdr-title"),
+    FAKE_HERDR_SCREEN: join(dir, "herdr-screen"),
     ...(opts.history ? { DORI_INBOUND_FAKE_HISTORY: join(dir, "history.json") } : {}),
     ...opts.env,
   });
   // process.execPath, not "bun": through a shim, kill() would miss the real listener.
-  const proc = Bun.spawn([process.execPath, SCRIPT], { env, stdout: "pipe", stderr: "pipe" });
+  const proc = Bun.spawn([process.execPath, SCRIPT], {
+    env,
+    stdin: opts.stdin ? "pipe" : "ignore",
+    stdout: "pipe",
+    stderr: "pipe",
+  });
   procs.push(proc);
   const lines: string[] = [];
   const waiters: (() => void)[] = [];
@@ -718,6 +759,479 @@ describe("working status and reactions", () => {
       files: [],
     });
     await stop(r);
+  });
+
+  describe("workingAgent: the status follows the lead's agent state in its session runtime", () => {
+    const on = { workingAgent: true };
+    const HG = "hourglass_flowing_sand";
+    const waitGate = (r: Run, g: string) => r.waitFor(new RegExp(`^FAKE_WAIT ${g.replace(/[\\.]/g, "\\$&")}$`));
+    const gets = (r: Run) => r.herdrCalls().filter((c) => c.argv[1] === "get");
+    const hcEnv = { ...botEnv, DORI_RUNTIME: "hc" };
+    // omo lead panes: the runtime can say idle while the agent works; the title (tool running) or the Working bar says otherwise.
+    const IDLE_TITLE = "OmO - Dori Startup - user";
+    const bar = (s: string) => `\n reply text\n\n${s}\n❯\n${"─".repeat(20)}\n~ • status line\n`;
+    const WORKING_BAR = bar(`── • Working (12s • esc to interrupt) ${"─".repeat(20)}`);
+    // A quoted "• Working (4s • esc to interrupt)" inside a reply is not the bar.
+    const IDLE_SCREEN = bar("─".repeat(20)).replace("reply text", 'reply quoting "• Working (4s • esc to interrupt)"');
+
+    test("working keeps the status and the hourglass on every refresh; the 30 min cap clears both", async () => {
+      const [g1, g2, g3] = [gate("w1"), gate("w2"), gate("w3")];
+      const r = start({
+        env: botEnv,
+        config: on,
+        herdrState: "working",
+        events: [
+          msg("CHW", "4001.000001", "a"),
+          { fake: "wait", file: g1 },
+          { fake: "advance", ms: 60_000 },
+          { fake: "advance", ms: 60_000 },
+          { fake: "wait", file: g2 },
+          { fake: "advance", ms: 29 * 60_000 },
+          { fake: "wait", file: g3 },
+        ],
+      });
+      await r.waitFor(/^INJECTED CHW:4001.000001$/);
+      writeFileSync(g1, "");
+      await waitGate(r, g2);
+      expect(grep(r, "FAKE_REACTION").sort()).toEqual(
+        ["FAKE_REACTION CHW 4001.000001 eyes", `FAKE_REACTION CHW 4001.000001 ${HG}`].sort(),
+      );
+      expect(grep(r, "FAKE_STATUS")).toEqual(Array(3).fill(fakeStatus("CHW", "4001.000001", STATUS)));
+      expect(grep(r, "FAKE_REACTION_REMOVE")).toEqual([]);
+      expect(gets(r).map((c) => c.argv)).toEqual([
+        ["pane", "get", "fakeW:p1"],
+        ["pane", "get", "fakeW:p1"],
+      ]);
+      expect(r.lines).toContain("WORKING_AGENT working");
+      writeFileSync(g2, "");
+      await waitGate(r, g3);
+      expect(grep(r, "FAKE_STATUS").slice(3)).toEqual([fakeStatus("CHW", "4001.000001", "")]);
+      expect(grep(r, "FAKE_REACTION_REMOVE")).toEqual([`FAKE_REACTION_REMOVE CHW 4001.000001 ${HG}`]);
+      expect(r.lines).toContain('WORKING_CLEAR {"channel":"CHW","thread":"4001.000001","reason":"limit"}');
+      await stop(r);
+    });
+
+    for (const state of ["idle", "done", "blocked"])
+      test(`${state}: a refresh within the grace keeps both, the next one clears the status and the hourglass, eyes stays`, async () => {
+        const [g1, g2] = [gate("i1"), gate("i2")];
+        const r = start({
+          env: botEnv,
+          config: on,
+          herdrState: state,
+          events: [
+            msg("CHI", "4002.000001", "a"),
+            { fake: "wait", file: g1 },
+            { fake: "advance", ms: 1_000 },
+            { fake: "advance", ms: 60_000 },
+            { fake: "advance", ms: 60_000 },
+            { fake: "wait", file: g2 },
+          ],
+        });
+        await r.waitFor(/^INJECTED CHI:4002.000001$/);
+        writeFileSync(g1, "");
+        await waitGate(r, g2);
+        expect(grep(r, "FAKE_STATUS")).toEqual([
+          fakeStatus("CHI", "4002.000001", STATUS),
+          fakeStatus("CHI", "4002.000001", STATUS),
+          fakeStatus("CHI", "4002.000001", ""),
+        ]);
+        expect(grep(r, "FAKE_REACTION_REMOVE")).toEqual([`FAKE_REACTION_REMOVE CHI 4002.000001 ${HG}`]);
+        expect(r.lines).toContain(`WORKING_CLEAR {"channel":"CHI","thread":"4002.000001","reason":"agent_${state}"}`);
+        expect(gets(r).length).toBe(2);
+        await stop(r);
+      });
+
+    test("unknown (the runtime hangs past its timeout, or fails): the status stays until 10 min after it last said working", async () => {
+      const [g1, g2, g3] = [gate("u1"), gate("u2"), gate("u3")];
+      const r = start({
+        env: { ...botEnv, DORI_HERDR_TIMEOUT_MS: "300" },
+        config: on,
+        herdrState: "hang",
+        events: [
+          msg("CHU", "4003.000001", "a"),
+          { fake: "wait", file: g1 },
+          { fake: "advance", ms: 9 * 60_000 },
+          msg("CHU2", "4003.000002", "b"),
+          { fake: "wait", file: g2 },
+          { fake: "advance", ms: 2 * 60_000 },
+          { fake: "wait", file: g3 },
+        ],
+      });
+      await r.waitFor(/^INJECTED CHU:4003.000001$/);
+      writeFileSync(g1, "");
+      await r.waitFor(/^INJECTED CHU2:4003.000002$/);
+      expect(r.lines).toContain("WORKING_AGENT unknown timeout");
+      writeFileSync(g2, "");
+      await waitGate(r, g3);
+      expect(grep(r, "FAKE_STATUS").filter((l) => l.includes(" CHU "))).toEqual([
+        fakeStatus("CHU", "4003.000001", STATUS),
+        fakeStatus("CHU", "4003.000001", STATUS),
+        fakeStatus("CHU", "4003.000001", ""),
+      ]);
+      expect(grep(r, "FAKE_STATUS").filter((l) => l.includes(" CHU2 "))).toEqual([
+        fakeStatus("CHU2", "4003.000002", STATUS),
+        fakeStatus("CHU2", "4003.000002", STATUS),
+      ]);
+      expect(grep(r, "FAKE_REACTION_REMOVE")).toEqual([`FAKE_REACTION_REMOVE CHU 4003.000001 ${HG}`]);
+      expect(r.lines).toContain('WORKING_CLEAR {"channel":"CHU","thread":"4003.000001","reason":"unknown_limit"}');
+      await stop(r);
+      const g4 = gate("u4");
+      const q = start({
+        env: botEnv,
+        config: on,
+        herdrState: "error",
+        events: [
+          msg("CHU", "4003.000003", "c"),
+          { fake: "wait", file: `${g1}x` },
+          { fake: "advance", ms: 60_000 },
+          { fake: "wait", file: g4 },
+        ],
+      });
+      await q.waitFor(/^INJECTED CHU:4003.000003$/);
+      writeFileSync(`${g1}x`, "");
+      await waitGate(q, g4);
+      expect(q.lines).toContain("WORKING_AGENT unknown exit 3");
+      expect(grep(q, "FAKE_STATUS")).toEqual([
+        fakeStatus("CHU", "4003.000003", STATUS),
+        fakeStatus("CHU", "4003.000003", STATUS),
+      ]);
+      expect(grep(q, "FAKE_REACTION_REMOVE")).toEqual([]);
+      await stop(q);
+    });
+
+    const omoCases = [
+      {
+        name: "a working title (omo running a tool)",
+        title: "OmO - Running eval",
+        screen: IDLE_SCREEN,
+        config: {},
+        via: "title",
+      },
+      {
+        name: "the Working bar on screen (omo thinking or writing)",
+        title: IDLE_TITLE,
+        screen: WORKING_BAR,
+        config: {},
+        via: "screen",
+      },
+      {
+        name: "a workingTitle from the config",
+        title: "busy: build",
+        screen: IDLE_SCREEN,
+        config: { workingTitle: "^busy: " },
+        via: "title",
+      },
+    ];
+    for (const c of omoCases)
+      test(`agent_status idle with ${c.name} keeps the status past the grace`, async () => {
+        const [g1, g2] = [gate("t1"), gate("t2")];
+        const r = start({
+          env: botEnv,
+          config: { ...on, ...c.config },
+          herdrState: "idle",
+          herdrTitle: c.title,
+          herdrScreen: c.screen,
+          events: [
+            msg("CHT", "4008.000001", "a"),
+            { fake: "wait", file: g1 },
+            { fake: "advance", ms: 60_000 },
+            { fake: "advance", ms: 60_000 },
+            { fake: "wait", file: g2 },
+          ],
+        });
+        await r.waitFor(/^INJECTED CHT:4008.000001$/);
+        writeFileSync(g1, "");
+        await waitGate(r, g2);
+        expect(grep(r, "FAKE_STATUS")).toEqual(Array(3).fill(fakeStatus("CHT", "4008.000001", STATUS)));
+        expect(grep(r, "FAKE_REACTION_REMOVE")).toEqual([]);
+        expect(r.lines).toContain(`WORKING_AGENT working ${c.via}`);
+        expect(r.lines.some((l) => l.startsWith("WORKING_CLEAR"))).toBe(false);
+        await stop(r);
+      });
+
+    test("agent_status idle with the idle title and no Working bar clears; turning workingScreen off skips the screen read", async () => {
+      const [g1, g2] = [gate("n1"), gate("n2")];
+      const r = start({
+        env: botEnv,
+        config: on,
+        herdrState: "idle",
+        herdrTitle: IDLE_TITLE,
+        herdrScreen: IDLE_SCREEN,
+        events: [
+          msg("CHN", "4009.000001", "a"),
+          { fake: "wait", file: g1 },
+          { fake: "advance", ms: 60_000 },
+          { fake: "wait", file: g2 },
+        ],
+      });
+      await r.waitFor(/^INJECTED CHN:4009.000001$/);
+      writeFileSync(g1, "");
+      await waitGate(r, g2);
+      expect(grep(r, "FAKE_STATUS")).toEqual([
+        fakeStatus("CHN", "4009.000001", STATUS),
+        fakeStatus("CHN", "4009.000001", ""),
+      ]);
+      expect(r.lines).toContain("WORKING_AGENT idle");
+      expect(r.lines).toContain('WORKING_CLEAR {"channel":"CHN","thread":"4009.000001","reason":"agent_idle"}');
+      expect(
+        r
+          .herdrCalls()
+          .filter((c) => c.argv[1] === "read")
+          .map((c) => c.argv),
+      ).toEqual([["pane", "read", "fakeW:p1", "--source", "visible"]]);
+      await stop(r);
+      const [h1, h2] = [gate("n3"), gate("n4")];
+      const q = start({
+        env: botEnv,
+        config: { ...on, workingScreen: "" },
+        herdrState: "idle",
+        herdrTitle: IDLE_TITLE,
+        herdrScreen: WORKING_BAR,
+        events: [
+          msg("CHN", "4009.000002", "b"),
+          { fake: "wait", file: h1 },
+          { fake: "advance", ms: 60_000 },
+          { fake: "wait", file: h2 },
+        ],
+      });
+      await q.waitFor(/^INJECTED CHN:4009.000002$/);
+      writeFileSync(h1, "");
+      await waitGate(q, h2);
+      expect(q.lines).toContain('WORKING_CLEAR {"channel":"CHN","thread":"4009.000002","reason":"agent_idle"}');
+      expect(q.herdrCalls().filter((c) => c.argv[1] === "read")).toEqual([]);
+      await stop(q);
+    });
+
+    test("agent_status idle but the screen read fails: unknown, the status stays until the 10 min cap", async () => {
+      const [g1, g2, g3] = [gate("k1"), gate("k2"), gate("k3")];
+      const r = start({
+        env: botEnv,
+        config: on,
+        herdrState: "idle",
+        herdrTitle: IDLE_TITLE,
+        herdrScreen: "error",
+        events: [
+          msg("CHK", "4010.000001", "a"),
+          { fake: "wait", file: g1 },
+          { fake: "advance", ms: 9 * 60_000 },
+          { fake: "wait", file: g2 },
+          { fake: "advance", ms: 2 * 60_000 },
+          { fake: "wait", file: g3 },
+        ],
+      });
+      await r.waitFor(/^INJECTED CHK:4010.000001$/);
+      writeFileSync(g1, "");
+      await waitGate(r, g2);
+      expect(r.lines).toContain("WORKING_AGENT unknown screen exit 3");
+      expect(grep(r, "FAKE_STATUS")).toEqual([
+        fakeStatus("CHK", "4010.000001", STATUS),
+        fakeStatus("CHK", "4010.000001", STATUS),
+      ]);
+      writeFileSync(g2, "");
+      await waitGate(r, g3);
+      expect(grep(r, "FAKE_STATUS").slice(2)).toEqual([fakeStatus("CHK", "4010.000001", "")]);
+      expect(r.lines).toContain('WORKING_CLEAR {"channel":"CHK","thread":"4010.000001","reason":"unknown_limit"}');
+      await stop(r);
+    });
+
+    test("a reply takes the hourglass off with the status, and eyes still turns into a check mark", async () => {
+      const [g1, g2, g3] = [gate("r1"), gate("r2"), gate("r3")];
+      const r = start({
+        env: botEnv,
+        config: on,
+        herdrState: "working",
+        events: [
+          msg("CHR", "4004.000001", "a"),
+          { fake: "wait", file: g1 },
+          reply("CHR", "4004.000002", "4004.000001"),
+          { fake: "wait", file: g2 },
+          { fake: "advance", ms: 60_000 },
+          { fake: "wait", file: g3 },
+        ],
+      });
+      await r.waitFor(/^INJECTED CHR:4004.000001$/);
+      writeFileSync(g1, "");
+      await r.waitFor(/^FAKE_REACTION CHR 4004.000001 white_check_mark$/);
+      expect(grep(r, "FAKE_REACTION_REMOVE").sort()).toEqual(
+        ["FAKE_REACTION_REMOVE CHR 4004.000001 eyes", `FAKE_REACTION_REMOVE CHR 4004.000001 ${HG}`].sort(),
+      );
+      expect(r.lines).toContain('WORKING_CLEAR {"channel":"CHR","thread":"4004.000001","reason":"reply"}');
+      writeFileSync(g2, "");
+      await waitGate(r, g3);
+      expect(grep(r, "FAKE_STATUS")).toEqual([fakeStatus("CHR", "4004.000001", STATUS)]);
+      expect(gets(r)).toEqual([]);
+      await stop(r);
+    });
+
+    test("off by default: no runtime state call, no hourglass, the old refresh even while the runtime says idle", async () => {
+      const [g1, g2] = [gate("o1"), gate("o2")];
+      const r = start({
+        env: botEnv,
+        herdrState: "idle",
+        events: [
+          msg("CHO", "4005.000001", "a"),
+          { fake: "wait", file: g1 },
+          { fake: "advance", ms: 60_000 },
+          { fake: "wait", file: g2 },
+        ],
+      });
+      await r.waitFor(/^INJECTED CHO:4005.000001$/);
+      writeFileSync(g1, "");
+      await waitGate(r, g2);
+      expect(grep(r, "FAKE_STATUS")).toEqual([
+        fakeStatus("CHO", "4005.000001", STATUS),
+        fakeStatus("CHO", "4005.000001", STATUS),
+      ]);
+      expect(grep(r, "FAKE_REACTION")).toEqual(["FAKE_REACTION CHO 4005.000001 eyes"]);
+      expect(gets(r)).toEqual([]);
+      expect(r.lines.some((l) => l.startsWith("WORKING_"))).toBe(false);
+      expect(existsSync(join(r.dir, "state", "inbound-hourglass.json"))).toBe(false);
+      await stop(r);
+    });
+
+    test("workingHerdr is accepted as an alias of workingAgent", async () => {
+      const [g1, g2] = [gate("a1"), gate("a2")];
+      const r = start({
+        env: botEnv,
+        config: { workingHerdr: true },
+        herdrState: "idle",
+        events: [
+          msg("CHA", "4011.000001", "a"),
+          { fake: "wait", file: g1 },
+          { fake: "advance", ms: 60_000 },
+          { fake: "wait", file: g2 },
+        ],
+      });
+      await r.waitFor(/^INJECTED CHA:4011.000001$/);
+      writeFileSync(g1, "");
+      await waitGate(r, g2);
+      expect(r.lines).toContain('WORKING_CLEAR {"channel":"CHA","thread":"4011.000001","reason":"agent_idle"}');
+      await stop(r);
+    });
+
+    test("a restart takes off the hourglass an earlier run left, before catch-up; the state file then lists only live ones", async () => {
+      const g = gate("l");
+      const r = start({
+        env: botEnv,
+        config: on,
+        herdrState: "working",
+        state: { "inbound-hourglass.json": [{ channel: "CHL", thread: "4006.000000", ts: "4006.000001" }] },
+        events: [{ fake: "connect" }, msg("CHL", "4006.000002", "new"), { fake: "wait", file: g }],
+      });
+      await r.waitFor(/^INJECTED CHL:4006.000002$/);
+      const i = (l: string) => r.lines.indexOf(l);
+      expect(i(`FAKE_REACTION_REMOVE CHL 4006.000001 ${HG}`)).toBeGreaterThan(-1);
+      expect(i(fakeStatus("CHL", "4006.000000", ""))).toBeGreaterThan(-1);
+      expect(i("WORKING_LEFTOVER_CLEARED n=1")).toBeLessThan(i("INBOUND_CATCHUP n=0"));
+      expect(i(`FAKE_REACTION_REMOVE CHL 4006.000001 ${HG}`)).toBeLessThan(i("INBOUND_CATCHUP n=0"));
+      expect(JSON.parse(readFileSync(join(r.dir, "state", "inbound-hourglass.json"), "utf8"))).toEqual([
+        { channel: "CHL", thread: "4006.000002", ts: "4006.000002" },
+      ]);
+      await stop(r);
+    });
+
+    test("supervised, closing stdin takes the hourglass and the status off before the listener exits", async () => {
+      const r = start({
+        env: { ...botEnv, DORI_INBOUND_SUPERVISED: "1" },
+        stdin: true,
+        config: on,
+        herdrState: "working",
+        events: [msg("CHX", "4007.000001", "a"), { fake: "wait", file: gate("x") }],
+      });
+      await r.waitFor(/^INJECTED CHX:4007.000001$/);
+      (r.proc.stdin as import("bun").FileSink).end();
+      expect(await r.proc.exited).toBe(0);
+      await r.waitFor(new RegExp(`^FAKE_REACTION_REMOVE CHX 4007.000001 ${HG}$`));
+      expect(r.lines).toContain(fakeStatus("CHX", "4007.000001", ""));
+      expect(r.lines).toContain('WORKING_CLEAR {"channel":"CHX","thread":"4007.000001","reason":"exit"}');
+      expect(JSON.parse(readFileSync(join(r.dir, "state", "inbound-hourglass.json"), "utf8"))).toEqual([]);
+    });
+
+    test("hc: status working keeps the status, read from hc --json get on the lead terminal", async () => {
+      const [g1, g2] = [gate("hw1"), gate("hw2")];
+      const r = start({
+        pane: "t4",
+        env: { ...hcEnv, DORI_HC: herdrExe },
+        config: on,
+        herdrState: "working",
+        events: [
+          msg("CHH", "4012.000001", "a"),
+          { fake: "wait", file: g1 },
+          { fake: "advance", ms: 60_000 },
+          { fake: "wait", file: g2 },
+        ],
+      });
+      await r.waitFor(/^INJECTED CHH:4012.000001$/);
+      writeFileSync(g1, "");
+      await waitGate(r, g2);
+      expect(gets(r).map((c) => c.argv)).toEqual([["--json", "get", "t4"]]);
+      expect(r.lines).toContain("WORKING_AGENT working");
+      expect(grep(r, "FAKE_STATUS")).toEqual(Array(2).fill(fakeStatus("CHH", "4012.000001", STATUS)));
+      expect(grep(r, "FAKE_REACTION_REMOVE")).toEqual([]);
+      await stop(r);
+    });
+
+    test("hc: status idle with no Working bar clears the status and the hourglass", async () => {
+      const [g1, g2] = [gate("hi1"), gate("hi2")];
+      const r = start({
+        pane: "hc:t6",
+        env: { ...botEnv, DORI_HC: herdrExe },
+        config: on,
+        herdrState: "idle",
+        herdrTitle: IDLE_TITLE,
+        herdrScreen: IDLE_SCREEN,
+        events: [
+          msg("CHJ", "4013.000001", "a"),
+          { fake: "wait", file: g1 },
+          { fake: "advance", ms: 60_000 },
+          { fake: "wait", file: g2 },
+        ],
+      });
+      await r.waitFor(/^INJECTED CHJ:4013.000001$/);
+      writeFileSync(g1, "");
+      await waitGate(r, g2);
+      expect(
+        r
+          .herdrCalls()
+          .filter((c) => c.argv[1] !== "send")
+          .map((c) => c.argv),
+      ).toEqual([
+        ["--json", "get", "t6"],
+        ["--json", "read", "t6", "--lines", "0"],
+      ]);
+      expect(r.lines).toContain("WORKING_AGENT idle");
+      expect(grep(r, "FAKE_STATUS")).toEqual([
+        fakeStatus("CHJ", "4013.000001", STATUS),
+        fakeStatus("CHJ", "4013.000001", ""),
+      ]);
+      expect(grep(r, "FAKE_REACTION_REMOVE")).toEqual([`FAKE_REACTION_REMOVE CHJ 4013.000001 ${HG}`]);
+      await stop(r);
+    });
+
+    test("hc: status idle with the Working bar in the hc read screen keeps the status", async () => {
+      const [g1, g2] = [gate("hs1"), gate("hs2")];
+      const r = start({
+        pane: "t4",
+        env: { ...hcEnv, DORI_HC: herdrExe },
+        config: on,
+        herdrState: "idle",
+        herdrTitle: IDLE_TITLE,
+        herdrScreen: WORKING_BAR,
+        events: [
+          msg("CHS", "4014.000001", "a"),
+          { fake: "wait", file: g1 },
+          { fake: "advance", ms: 60_000 },
+          { fake: "wait", file: g2 },
+        ],
+      });
+      await r.waitFor(/^INJECTED CHS:4014.000001$/);
+      writeFileSync(g1, "");
+      await waitGate(r, g2);
+      expect(r.lines).toContain("WORKING_AGENT working screen");
+      expect(grep(r, "FAKE_STATUS")).toEqual(Array(2).fill(fakeStatus("CHS", "4014.000001", STATUS)));
+      expect(grep(r, "FAKE_REACTION_REMOVE")).toEqual([]);
+      await stop(r);
+    });
   });
 });
 

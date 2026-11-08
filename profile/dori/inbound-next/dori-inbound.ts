@@ -1,4 +1,6 @@
 // Dori Slack inbound: Socket Mode -> one INBOUND line per owner message, eyes reaction as read receipt, working status until the bot replies.
+// Opt-in "workingAgent": true (alias "workingHerdr") keeps that status, plus an hourglass on the message, only while the lead's
+// agent works, as its session runtime (herdr or hc, the one delivery uses) reports it; see agent-state.ts.
 import { mkdirSync, readFileSync, renameSync, statSync, unlinkSync, utimesSync, writeFileSync } from "node:fs";
 import { EventEmitter } from "node:events";
 import { homedir, tmpdir } from "node:os";
@@ -6,6 +8,7 @@ import { createHash } from "node:crypto";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
 import { catchUp, type SlackMsg } from "./catchup.ts";
+import { type AgentState, isStopped, readAgent } from "./agent-state.ts";
 const HOME = homedir();
 type SlackFile = { id?: string; name?: string; mimetype?: string };
 type SlackEvent = {
@@ -128,6 +131,7 @@ process.on("exit", () => {
     if (lockPid() === process.pid) unlinkSync(LISTENER_LOCK);
   } catch {}
 });
+let beforeExit = async () => {}; // set below once the working status exists: takes hourglass reactions off
 // Under run-inbound (DORI_INBOUND_SUPERVISED=1) stdin is a pipe the supervisor holds; it closes however the supervisor dies
 // (closed pane, hard kill), so exit with it instead of living on as an orphan that keeps a Socket Mode connection.
 if (process.env.DORI_INBOUND_SUPERVISED === "1")
@@ -136,6 +140,7 @@ if (process.env.DORI_INBOUND_SUPERVISED === "1")
       for await (const _ of Bun.stdin.stream()) {
       }
     } catch {}
+    await beforeExit();
     process.exit(0); // no log line: stdout went with the supervisor
   })();
 // Fake Slack Web API: DORI_INBOUND_FAKE_HISTORY JSON is { [method]: { ["<channel>:<ts>" | "<channel>" | "*"]: responseJson } }; anything else answers { ok: true, messages: [] }.
@@ -164,7 +169,7 @@ const fakeFetch = (async (url: string | URL | Request, init?: RequestInit) => {
 const slackFetch: typeof fetch = FAKE_EVENTS || FAKE_HISTORY ? fakeFetch : fetch;
 // Fake listener: replays DORI_INBOUND_FAKE_EVENTS (JSONL of Slack message events) with the real listener's event names.
 // Control lines: {"fake":"connect"} (optional "num_connections", as in Slack's hello), {"fake":"disconnect"}, {"fake":"wait","file":"<path>"} (blocks until the file exists),
-// {"fake":"advance","ms":N} (moves the working-status clock by N ms and runs one refresh).
+// {"fake":"advance","ms":N} (moves the working-status clock by N ms and runs one refresh; the next line waits for it).
 class FakeListener {
   emitter = new EventEmitter();
   on(ev: string, fn: (arg: never) => void) {
@@ -186,7 +191,8 @@ class FakeListener {
         } else if (l.fake === "disconnect") {
           console.log("FAKE_DISCONNECT");
           this.emitter.emit("disconnected");
-        } else if (l.fake === "advance") this.emitter.emit("fake-advance", l.ms);
+        } else if (l.fake === "advance")
+          await Promise.all(this.emitter.listeners("fake-advance").map((f) => (f as (ms: number) => unknown)(l.ms)));
         else if (l.fake === "wait") {
           console.log(`FAKE_WAIT ${l.file}`);
           while (!(await Bun.file(l.file).exists())) await Bun.sleep(20);
@@ -409,7 +415,50 @@ const WORKING_STATUS = process.env.DORI_WORKING_STATUS || "작업 중...";
 const SLACK_TIMEOUT_MS = envMs("DORI_SLACK_TIMEOUT_MS", 10_000);
 let clockOffset = 0; // moved only by the fake listener's advance lines
 const now = () => Date.now() + clockOffset;
-const working = new Map<string, { channel: string; thread: string; until: number }>();
+// Opt-in, default off: "workingAgent": true in the Dori config (DORI_CONFIG; "workingHerdr" is an alias) keeps the status,
+// plus an hourglass reaction on the owner's message, only while the lead's session runtime says its agent works. idle, done
+// or blocked clear both on the next refresh. While the runtime cannot tell (unknown state, no runtime, error, timeout) they
+// stay at most DORI_WORKING_UNKNOWN_LIMIT_MS (10 min) after it last said working. DORI_WORKING_LIMIT_MS still caps the run.
+// The runtime is the one delivery uses (leadRuntime). An omo lead can report idle while it works, so two more signals count
+// as working: the terminal title matching "workingTitle" (omo: "OmO - Running <tool>", while a tool runs) or a screen line
+// matching "workingScreen" (omo: the "── • Working (12s • esc to interrupt) ──" bar, the whole turn). Regex strings in
+// the config, "" turns one off. Read once at start.
+const DORI_CONFIG_JSON: Record<string, unknown> | null = await Bun.file(CONFIG)
+  .json()
+  .catch(() => null);
+const WORKING_AGENT = (DORI_CONFIG_JSON?.["workingAgent"] ?? DORI_CONFIG_JSON?.["workingHerdr"]) === true;
+const configRegex = (key: string, fallback: string): RegExp | null => {
+  const v = DORI_CONFIG_JSON?.[key];
+  const source = typeof v === "string" ? v : fallback;
+  if (!source) return null;
+  try {
+    return new RegExp(source, "m");
+  } catch (err) {
+    console.log(`INBOUND_ERROR config ${key} ${errMessage(err)}`);
+    return null;
+  }
+};
+const AGENT_PROBE = {
+  herdr: HERDR,
+  hc: HC,
+  // The runtime call runs in the refresh, never in the delivery queue, and is bounded like the Slack calls.
+  timeoutMs: envMs("DORI_HERDR_TIMEOUT_MS", 5_000),
+  title: WORKING_AGENT ? configRegex("workingTitle", "^OmO - Running ") : null,
+  screen: WORKING_AGENT ? configRegex("workingScreen", "^─+ • Working \\(.*esc to interrupt\\)") : null,
+};
+const UNKNOWN_LIMIT_MS = envMs("DORI_WORKING_UNKNOWN_LIMIT_MS", 10 * 60_000);
+// A message typed into the pane a moment before a refresh can find the agent not started yet: idle that early is not "done".
+const WORKING_GRACE_MS = envMs("DORI_WORKING_GRACE_MS", 15_000);
+const HOURGLASS = "hourglass_flowing_sand";
+type Working = {
+  channel: string;
+  thread: string;
+  until: number;
+  start: number;
+  lastWorking: number;
+  hourglass: string[];
+};
+const working = new Map<string, Working>();
 const unanswered = new Map<string, { channel: string; thread: string; ts: string }>();
 const slackPost = async (method: string, body: object): Promise<SlackReply | null> => {
   const r = await slackFetch(`https://slack.com/api/${method}`, {
@@ -437,22 +486,62 @@ const setStatus = async (channel: string, thread: string, status: string) => {
     console.log(`INBOUND_SKIP ${JSON.stringify({ channel, ts: thread, reason: "status_failed" })}`);
   }
 };
+// Hourglasses still on Slack, kept in a state file so a restart after a hard kill takes them off (leftovers: an earlier run's).
+const HOURGLASS_FILE = `${STATE_DIR}/inbound-hourglass.json`;
+type Hourglass = { channel: string; thread: string; ts: string };
+const readLeftovers: unknown = await Bun.file(HOURGLASS_FILE)
+  .json()
+  .catch(() => []);
+let leftovers: Hourglass[] = Array.isArray(readLeftovers) ? readLeftovers : [];
+const hadLeftovers = leftovers.length > 0;
+const saveHourglasses = () => {
+  if (!WORKING_AGENT && !hadLeftovers) return;
+  const list = [...leftovers];
+  for (const w of working.values())
+    for (const ts of w.hourglass) list.push({ channel: w.channel, thread: w.thread, ts });
+  try {
+    mkdirSync(STATE_DIR, { recursive: true });
+    const tmp = `${HOURGLASS_FILE}.${process.pid}.tmp`;
+    writeFileSync(tmp, JSON.stringify(list));
+    renameSync(tmp, HOURGLASS_FILE);
+  } catch (err) {
+    console.log(`INBOUND_ERROR hourglass state ${errMessage(err)}`);
+  }
+};
 const showWorking = async (e: SlackEvent) => {
-  const thread = e.thread_ts ?? e.ts;
-  working.set(`${e.channel}:${thread}`, { channel: e.channel, thread, until: now() + WORKING_LIMIT_MS });
+  const thread = e.thread_ts ?? e.ts,
+    key = `${e.channel}:${thread}`;
+  const hourglass = WORKING_AGENT ? [...(working.get(key)?.hourglass ?? []), e.ts] : [];
+  const t = now();
+  working.set(key, { channel: e.channel, thread, until: t + WORKING_LIMIT_MS, start: t, lastWorking: t, hourglass });
   unanswered.set(`${e.channel}:${e.ts}`, { channel: e.channel, thread, ts: e.ts });
-  await setStatus(e.channel, thread, WORKING_STATUS);
+  saveHourglasses();
+  await Promise.all([
+    setStatus(e.channel, thread, WORKING_STATUS),
+    WORKING_AGENT ? react("add", e.channel, e.ts, HOURGLASS) : null,
+  ]);
+};
+// Drops the entry at once (so no refresh puts the status back), then clears the status and takes its hourglasses off.
+const clearWorking = async (key: string, w: Working, reason: string, clearStatus = true) => {
+  working.delete(key);
+  if (!WORKING_AGENT) {
+    if (clearStatus) await setStatus(w.channel, w.thread, "");
+    return;
+  }
+  saveHourglasses();
+  console.log(`WORKING_CLEAR ${JSON.stringify({ channel: w.channel, thread: w.thread, reason })}`);
+  await Promise.all([
+    clearStatus ? setStatus(w.channel, w.thread, "") : null,
+    ...w.hourglass.map((ts) => react("remove", w.channel, ts, HOURGLASS)),
+  ]);
 };
 // A reply in the thread clears Slack's status by itself; a top-level reply in the channel does not, so clear those too.
 const stopWorking = async (e: SlackEvent) => {
   // Stop the refresh first, so a tick during the reaction calls cannot put the status back.
   for (const [key, w] of working) {
     if (w.channel !== e.channel) continue;
-    if (e.thread_ts === w.thread) working.delete(key);
-    else if (!e.thread_ts) {
-      working.delete(key);
-      void setStatus(w.channel, w.thread, "");
-    }
+    if (e.thread_ts === w.thread) void clearWorking(key, w, "reply", false);
+    else if (!e.thread_ts) void clearWorking(key, w, "reply");
   }
   // An answer turns the read receipt into a check mark.
   for (const [key, m] of unanswered) {
@@ -462,19 +551,83 @@ const stopWorking = async (e: SlackEvent) => {
     await react("add", m.channel, m.ts, "white_check_mark");
   }
 };
-const refreshWorking = () => {
-  for (const [key, w] of working) {
-    if (now() > w.until) working.delete(key);
-    else void setStatus(w.channel, w.thread, WORKING_STATUS);
+let lastAgent = "";
+const agentState = async (): Promise<AgentState> => {
+  const pane = await resolvePane();
+  const r = pane
+    ? await readAgent(AGENT_PROBE, (await leadRuntime(pane)) === "hc" ? "hc" : "herdr", pane)
+    : { state: "unknown" as const, why: "no lead pane", via: "" };
+  const line = r.why ? `unknown ${r.why}` : r.via ? `${r.state} ${r.via}` : r.state;
+  if (line !== lastAgent) {
+    lastAgent = line;
+    console.log(`WORKING_AGENT ${line}`);
   }
+  return r.state;
+};
+const agentRefresh = async () => {
+  const state = await agentState();
+  const t = now();
+  await Promise.all(
+    [...working].map(([key, w]) => {
+      if (state === "working") {
+        w.lastWorking = t;
+        return setStatus(w.channel, w.thread, WORKING_STATUS);
+      }
+      if (isStopped(state) && t - w.start >= WORKING_GRACE_MS) return clearWorking(key, w, `agent_${state}`);
+      if (!isStopped(state) && t - w.lastWorking >= UNKNOWN_LIMIT_MS) return clearWorking(key, w, "unknown_limit");
+      return setStatus(w.channel, w.thread, WORKING_STATUS);
+    }),
+  );
+};
+let agentTick: Promise<void> | null = null;
+const refreshWorking = async () => {
+  const cleared: Promise<void>[] = [];
+  for (const [key, w] of working) {
+    if (now() > w.until) {
+      if (WORKING_AGENT) cleared.push(clearWorking(key, w, "limit"));
+      else working.delete(key);
+    } else if (!WORKING_AGENT) void setStatus(w.channel, w.thread, WORKING_STATUS);
+  }
+  if (!WORKING_AGENT) return;
+  await Promise.all(cleared);
+  // One runtime call at a time: a tick that finds one running waits for it instead of starting another.
+  if (!working.size) return;
+  agentTick ??= agentRefresh().finally(() => {
+    agentTick = null;
+  });
+  await agentTick;
 };
 // Unref'd: the Slack socket owns the process lifetime, and a listener that stops must exit so the supervisor restarts it.
-setInterval(refreshWorking, WORKING_REFRESH_MS).unref();
+setInterval(() => void refreshWorking(), WORKING_REFRESH_MS).unref();
 if (FAKE_EVENTS)
   listener.on("fake-advance", (ms: number) => {
     clockOffset += ms;
-    refreshWorking();
+    return refreshWorking();
   });
+// Leave no hourglass behind on exit: the supervisor closing stdin, or a signal where the platform delivers one.
+const clearAll = (reason: string) => Promise.all([...working].map(([key, w]) => clearWorking(key, w, reason)));
+beforeExit = async () => {
+  if (WORKING_AGENT) await clearAll("exit");
+};
+if (WORKING_AGENT)
+  for (const [sig, code] of [
+    ["SIGINT", 130],
+    ["SIGTERM", 143],
+  ] as const)
+    process.on(sig, () => void clearAll("exit").finally(() => process.exit(code)));
+// Hourglasses an earlier run left (hard kill): off before the first catch-up, which puts back what is redelivered.
+const clearLeftovers = async () => {
+  if (!leftovers.length) return;
+  const old = leftovers,
+    threads = new Map(old.map((h) => [`${h.channel}:${h.thread}`, h]));
+  await Promise.all([
+    ...old.map((h) => react("remove", h.channel, h.ts, HOURGLASS)),
+    ...[...threads.values()].map((h) => setStatus(h.channel, h.thread, "")),
+  ]);
+  console.log(`WORKING_LEFTOVER_CLEARED n=${old.length}`);
+  leftovers = [];
+  saveHourglasses();
+};
 const deliver = async (e: SlackEvent) => {
   await Promise.all([react("add", e.channel, e.ts, "eyes"), showWorking(e)]);
   const files = (e.files ?? []).map((f) => ({ id: f.id, name: f.name, mimetype: f.mimetype }));
@@ -551,6 +704,7 @@ listener.on("connected", (info: { num_connections?: number } | undefined) => {
     dupFloor = null;
   }
   enqueue(async () => {
+    await clearLeftovers();
     const from = { ...cursors };
     if (floor) for (const [ch, ts] of Object.entries(floor)) if (!from[ch] || cmpTs(ts, from[ch]) < 0) from[ch] = ts;
     const found: SlackMsg[] = await catchUp({
