@@ -1,11 +1,16 @@
-import { HcRuntime } from "../src/runtime/hc/index.ts";
+import { HcRuntime, type HcRuntimeOptions } from "../src/runtime/hc/index.ts";
 import type { CreateSpec, SessionRef } from "../src/runtime/types.ts";
 import { FakeHc, type FakeTerminal } from "./fake-hc.ts";
 
 // The hc adapter over the FakeHc recorder, shared by the runtime-hc*.test.ts files.
 export const T1: SessionRef = { runtime: "hc", id: "t1" };
 
-export function rig(initial: Record<string, FakeTerminal> = {}, env: Record<string, string | undefined> = {}) {
+// Upstream's cases pin the POSIX adapter; Windows cases pass { windows: true, belowShell }.
+export function rig(
+  initial: Record<string, FakeTerminal> = {},
+  env: Record<string, string | undefined> = {},
+  options: HcRuntimeOptions = { windows: false },
+) {
   const fake = new FakeHc(initial);
   const sleeps: number[] = [];
   const logs: string[] = [];
@@ -13,6 +18,7 @@ export function rig(initial: Record<string, FakeTerminal> = {}, env: Record<stri
     env,
     sleep: async (ms) => void sleeps.push(ms),
     log: (line) => void logs.push(line),
+    ...options,
   });
   return { fake, rt, sleeps, logs };
 }

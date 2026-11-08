@@ -40,8 +40,23 @@ async function liveNames(exec: Exec): Promise<Set<string>> {
   return names;
 }
 
-/** The `hc run` argv for a spec: labels for grouping, the env through the `env` utility (one argv element per K=V). */
-export function createArgv(spec: CreateSpec, shell: string, name: string | undefined): string[] {
+const PS_QUOTES = /['\u2018\u2019\u201A\u201B]/g;
+const psLiteral = (s: string): string => `'${s.replace(PS_QUOTES, (c) => c + c)}'`;
+
+/**
+ * The shell with the env set. POSIX: the `env` utility, one argv element per K=V. Windows has no `env` and hc no
+ * --env flag: PowerShell sets each variable as a literal and keeps its prompt (-NoExit).
+ */
+export function shellArgv(shell: string, env: Readonly<Record<string, string>>, windows: boolean): string[] {
+  if (!windows) return ["env", ...Object.entries(env).map(([k, v]) => `${k}=${v}`), shell];
+  const set = Object.entries(env)
+    .map(([k, v]) => `$env:${k} = ${psLiteral(v)}`)
+    .join("; ");
+  return [shell, "-NoLogo", "-NoExit", ...(set === "" ? [] : ["-Command", set])];
+}
+
+/** The `hc run` argv for a spec: labels for grouping, the user's shell with the env set (see shellArgv). */
+export function createArgv(spec: CreateSpec, shell: string, name: string | undefined, windows = false): string[] {
   for (const key of Object.keys(spec.env))
     if (!ENV_KEY.test(key)) throw new Error(`env key ${JSON.stringify(key)} is not a shell variable name`);
   const labels = [
@@ -60,9 +75,7 @@ export function createArgv(spec: CreateSpec, shell: string, name: string | undef
     ...labels.flatMap((l) => ["--label", l]),
     ...(name === undefined ? [] : ["--name", name]),
     "--",
-    "env",
-    ...Object.entries(spec.env).map(([k, v]) => `${k}=${v}`),
-    shell,
+    ...shellArgv(shell, spec.env, windows),
   ];
 }
 
@@ -71,15 +84,15 @@ export function createArgv(spec: CreateSpec, shell: string, name: string | undef
  * path). The slug name is used only when no live terminal holds it; a name taken in between is retried without one.
  * Identity is the address plus labels, never the name.
  */
-export async function create(exec: Exec, spec: CreateSpec, shell: string): Promise<SessionRef> {
+export async function create(exec: Exec, spec: CreateSpec, shell: string, windows = false): Promise<SessionRef> {
   const slug = slugName(spec.name);
   const name = slug !== undefined && !(await liveNames(exec)).has(slug) ? slug : undefined;
   let result: Record<string, unknown>;
   try {
-    result = await hcCall(exec, createArgv(spec, shell, name));
+    result = await hcCall(exec, createArgv(spec, shell, name, windows));
   } catch (e) {
     if (name === undefined || !isKind(e, "name_taken")) throw e;
-    result = await hcCall(exec, createArgv(spec, shell, undefined));
+    result = await hcCall(exec, createArgv(spec, shell, undefined, windows));
   }
   const id = str(result["address"]);
   if (id === undefined) throw new Error("hc run did not return an address");

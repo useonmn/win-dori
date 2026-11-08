@@ -13,6 +13,7 @@ import type {
   SessionRuntime,
   SubmitResult,
 } from "../types.ts";
+import { type BelowShell, processBelowShell } from "./below-shell.ts";
 import { deliver, keys, read, typeIntoShell } from "./deliver.ts";
 import { probe } from "./probe.ts";
 import { close, create, list, selfRef, start } from "./sessions.ts";
@@ -21,7 +22,13 @@ export type HcRuntimeOptions = {
   readonly env?: Readonly<Record<string, string | undefined>>;
   readonly sleep?: (ms: number) => Promise<void>;
   readonly log?: (line: string) => void;
+  /** Windows (default: the host): the shell is PowerShell and herdr-core #70 is worked around (see below-shell.ts). */
+  readonly windows?: boolean;
+  readonly belowShell?: BelowShell;
 };
+
+/** hc's own default on Windows: PowerShell 7 when installed, else Windows PowerShell. */
+const windowsShell = (): string => (Bun.which("pwsh") ? "pwsh.exe" : "powershell.exe");
 
 /** herdr-core (`hc`) behind the session runtime interface, one `hc --json` call per step. */
 export class HcRuntime implements SessionRuntime {
@@ -29,6 +36,8 @@ export class HcRuntime implements SessionRuntime {
   private readonly env: Readonly<Record<string, string | undefined>>;
   private readonly sleep: (ms: number) => Promise<void>;
   private readonly log: (line: string) => void;
+  private readonly windows: boolean;
+  private readonly belowShell: BelowShell | undefined;
 
   constructor(
     private readonly exec: Exec = spawnExec,
@@ -37,6 +46,8 @@ export class HcRuntime implements SessionRuntime {
     this.env = options.env ?? process.env;
     this.sleep = options.sleep ?? ((ms) => Bun.sleep(ms));
     this.log = options.log ?? ((line) => void process.stderr.write(`${line}\n`));
+    this.windows = options.windows ?? process.platform === "win32";
+    this.belowShell = options.belowShell ?? (this.windows ? processBelowShell() : undefined);
   }
 
   self(): SessionRef | undefined {
@@ -49,7 +60,7 @@ export class HcRuntime implements SessionRuntime {
   }
 
   create(spec: CreateSpec): Promise<SessionRef> {
-    return create(this.exec, spec, this.env["SHELL"] || "sh");
+    return create(this.exec, spec, this.windows ? windowsShell() : this.env["SHELL"] || "sh", this.windows);
   }
 
   start(ref: SessionRef, command: string): Promise<void> {
@@ -61,7 +72,7 @@ export class HcRuntime implements SessionRuntime {
   }
 
   probe(ref: SessionRef): Promise<Probe> {
-    return probe(this.exec, ref.id);
+    return probe(this.exec, ref.id, this.belowShell);
   }
 
   read(ref: SessionRef, lines: number): Promise<string> {
@@ -69,7 +80,7 @@ export class HcRuntime implements SessionRuntime {
   }
 
   deliver(ref: SessionRef, text: string, opts?: DeliverOptions): Promise<DeliverOutcome> {
-    return deliver(this.exec, ref.id, text, opts);
+    return deliver(this.exec, ref.id, text, opts, this.belowShell);
   }
 
   /**
@@ -82,7 +93,7 @@ export class HcRuntime implements SessionRuntime {
   }
 
   typeIntoShell(ref: SessionRef, text: string): Promise<boolean> {
-    return typeIntoShell(this.exec, ref.id, text);
+    return typeIntoShell(this.exec, ref.id, text, this.belowShell);
   }
 
   keys(ref: SessionRef, names: readonly Key[]): Promise<void> {

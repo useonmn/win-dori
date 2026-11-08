@@ -1,5 +1,6 @@
 import type { Exec } from "../exec.ts";
 import type { AgentStatus, DeliverOptions, DeliverOutcome, Key } from "../types.ts";
+import type { BelowShell } from "./below-shell.ts";
 import { hcCall, isKind } from "./exec.ts";
 import { probe } from "./probe.ts";
 
@@ -9,9 +10,9 @@ const scrub = (message: string, text: string): string => (text === "" ? message 
 const messageOf = (e: unknown): string => (e instanceof Error ? e.message : String(e));
 
 /** The status after hc refused a compare-and-send; a failed re-read is reported as unknown. */
-async function statusNow(exec: Exec, id: string): Promise<AgentStatus> {
+async function statusNow(exec: Exec, id: string, belowShell?: BelowShell): Promise<AgentStatus> {
   try {
-    return (await probe(exec, id)).status;
+    return (await probe(exec, id, belowShell)).status;
   } catch {
     return "unknown";
   }
@@ -29,11 +30,12 @@ export async function deliver(
   id: string,
   text: string,
   opts: DeliverOptions = {},
+  belowShell?: BelowShell,
 ): Promise<DeliverOutcome> {
   const { when = "idle", force = false } = opts;
   let before: Awaited<ReturnType<typeof probe>>;
   try {
-    before = await probe(exec, id);
+    before = await probe(exec, id, belowShell);
   } catch (e) {
     process.stderr.write(`dori: hc get ${id} failed (${messageOf(e)}); holding delivery\n`);
     return { kind: "not-ready", status: "unknown" };
@@ -52,7 +54,7 @@ export async function deliver(
     result = await hcCall(exec, argv, { redact: text });
   } catch (e) {
     if (isKind(e, "blocked")) return { kind: "not-ready", status: "blocked" };
-    if (isKind(e, "status_mismatch")) return { kind: "not-ready", status: await statusNow(exec, id) };
+    if (isKind(e, "status_mismatch")) return { kind: "not-ready", status: await statusNow(exec, id, belowShell) };
     if (isKind(e, "not_found", "finished")) return { kind: "no-agent" };
     const detail = scrub(
       e instanceof Error && "reason" in e && typeof e.reason === "string" ? e.reason : messageOf(e),
@@ -70,8 +72,8 @@ export async function deliver(
 }
 
 /** The operator's explicit `--to-shell`: only into a session whose probe says `shell`; no gate (a shell reports none). */
-export async function typeIntoShell(exec: Exec, id: string, text: string): Promise<boolean> {
-  if ((await probe(exec, id)).status !== "shell") return false;
+export async function typeIntoShell(exec: Exec, id: string, text: string, belowShell?: BelowShell): Promise<boolean> {
+  if ((await probe(exec, id, belowShell)).status !== "shell") return false;
   await hcCall(exec, ["send", id, "--", text], { redact: text });
   return true;
 }
