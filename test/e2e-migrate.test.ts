@@ -37,8 +37,9 @@ const agent7501 = join(root, "agent-7501.sh");
 // Windows has no sh or cat: the TypeScript fixture agent (OSC 7501 idle, echoes what it reads) stands in for both.
 const win = process.platform === "win32";
 const fixture7501 = resolve(import.meta.dir, "fixtures/fake-agent-7501.ts").replaceAll("\\", "/");
-const herdrAgent = win ? `bun ${fixture7501}` : "sh -c 'exec cat' lane";
-const hcAgent = win ? `bun ${fixture7501}` : `sh -c '. "$0"' ${shq(agent7501)}`;
+const bunExe = process.execPath.replaceAll("\\", "/");
+const herdrAgent = win ? `${bunExe} ${fixture7501}` : "sh -c 'exec cat' lane";
+const hcAgent = win ? `${bunExe} ${fixture7501}` : `sh -c '. "$0"' ${shq(agent7501)}`;
 let herdrServer: ReturnType<typeof Bun.spawn> | undefined;
 let corePid: number | undefined;
 
@@ -114,7 +115,7 @@ test.skipIf(!both)(
       workspace: { workspace_id: string };
     };
     const lead = ws.root_pane.pane_id;
-    await herdr("pane", "run", lead, win ? `bun ${fixture7501}` : "cat");
+    await herdr("pane", "run", lead, win ? `${bunExe} ${fixture7501}` : "cat");
     await dori({}, "role", "lead", lead);
     const brief = join(root, "brief.md");
     writeFileSync(brief, "E2E-MIGRATE-BRIEF\n");

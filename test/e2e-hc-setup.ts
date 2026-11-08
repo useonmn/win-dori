@@ -43,7 +43,10 @@ export const doriEnv = (home: string) => ({
   DORI_HOME: home,
   DORI_RUNTIME: "hc",
   DORI_TELEMETRY: "0",
-  DORI_AGENT_CMD: win ? `bun ${fixture.replaceAll("\\", "/")}` : `sh -c '. "$0"' ${shq(fixture)}`,
+  // On Windows bun by its full path: the core's terminals need not inherit the PATH setup-bun gave this process.
+  DORI_AGENT_CMD: win
+    ? `${process.execPath.replaceAll("\\", "/")} ${fixture.replaceAll("\\", "/")}`
+    : `sh -c '. "$0"' ${shq(fixture)}`,
 });
 
 export const newHome = (name: string): string => {
