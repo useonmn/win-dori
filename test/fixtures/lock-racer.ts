@@ -1,4 +1,4 @@
-import { acquire, release } from "../../src/loop.ts";
+import { acquire, release } from "../../src/loop-lock.ts";
 import { Store } from "../../src/store.ts";
 
 // One contender for the loop lock in its own process: races on "go", holds what it won until stdin closes.

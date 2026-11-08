@@ -23,17 +23,10 @@
   "skills/dori-mode/scripts/test/telegram-inbound.test.ts": 334,
   "skills/dori-mode/scripts/test/verify-pr.test.ts": 505,
   "skills/dori-mode/scripts/test/worklog.test.ts": 390,
-  "src/cli.ts": 412,
-  "src/harness.ts": 694,
   "src/herdr.ts": 415,
-  "src/loop.ts": 536,
-  "src/store.ts": 357,
   "src/telemetry.ts": 282,
   "test/e2e.test.ts": 312,
-  "test/harness.test.ts": 390,
   "test/herdr.test.ts": 329,
-  "test/inbox-followups.test.ts": 258,
-  "test/loop.test.ts": 481,
   "test/telemetry.test.ts": 269,
-  "test/windows.test.ts": 662
+  "test/windows.test.ts": 666
 }

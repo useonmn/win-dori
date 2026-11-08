@@ -15,9 +15,14 @@ import { cpus, tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { main } from "../src/cli.ts";
 import { realFsOps, type FsOps } from "../src/fsx.ts";
-import { load1, ready, review, startLane, windowsLoad, type Deps } from "../src/harness.ts";
+import { backlogAdd } from "../src/backlog.ts";
+import { review } from "../src/gate.ts";
+import type { Deps } from "../src/harness.ts";
+import { load1, windowsLoad } from "../src/host.ts";
+import { ready, startLane } from "../src/lanes.ts";
 import { Herdr, spawnExec, type Exec } from "../src/herdr.ts";
-import { acquire, loopTick, release } from "../src/loop.ts";
+import { loopTick } from "../src/loop.ts";
+import { acquire, release } from "../src/loop-lock.ts";
 import { batArg, resolveCommand, type CommandSys } from "../src/run.ts";
 import { appendArg, doriCommand, IS_WINDOWS, paneCommand, paneShell, quoteArg, type PaneShell } from "../src/shell.ts";
 import { Store } from "../src/store.ts";
@@ -65,7 +70,6 @@ describe("host load", () => {
 
   test("a host busy by the Windows figure holds the loop's starts", async () => {
     const { w, d, brief } = setup();
-    const { backlogAdd } = await import("../src/loop.ts");
     backlogAdd(d, "held-item", brief, { cwd: d.store.root });
     w.host = { load1: windowsLoad(4, () => '{"queue":6,"cpuPct":100}'), cores: 4, memFreePct: 50 };
     const run = await loopTick(d, { force: true });
