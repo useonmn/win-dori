@@ -146,17 +146,17 @@ test("with runtime hc, boot opens a labelled hc terminal and writes its address 
   const log = join(root, "fake-hc.log");
   writeFileSync(
     hc,
-    `@echo off\r\necho %* >> "${log}"\r\nif "%2"=="run" echo {"address":"t3","state":"live"}\r\nexit /b 0\r\n`,
+    `@echo off\r\necho %* >> "${log}"\r\nif "%2"=="run" echo {"address":"t1b","state":"live"}\r\nexit /b 0\r\n`,
   );
   const r = await ps(["-File", BOOT, "-Hc", hc, "-Herdr", join(root, "no-herdr.cmd"), "-NoLaunch"]);
-  expect(r.out).toContain("BOOT_OK pane=t3 workspace=dori name=Dori");
+  expect(r.out).toContain("BOOT_OK pane=t1b workspace=dori name=Dori");
   expect(r.out).toContain("runtime=hc");
   const cfg = JSON.parse(readFileSync(c, "utf8"));
   expect([cfg.leadPane, cfg.laneWorkspace, cfg.workspaces, cfg.ignorePanes, cfg.runtime]).toEqual([
-    "t3",
+    "t1b",
     "dori",
     ["dori"],
-    ["t3"],
+    ["t1b"],
     "hc",
   ]);
   const calls = readFileSync(log, "utf8");

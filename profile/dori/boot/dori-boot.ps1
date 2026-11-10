@@ -30,11 +30,11 @@ if ($runtime -eq 'hc') {
     # The core starts on the first call; the lead runs the user's shell (hc's default: PowerShell 7, else 5.1).
     & $Hc --json server status *> $null
     $created = & $Hc --json run --bg --no-parent --no-notify --cwd $env:USERPROFILE --name $label --label "dori.group=$label" --label 'dori.role=lead' | Out-String
-    if (-not ($created -match '"address":"(t\d+)"')) {
+    if (-not ($created -match '"address":"(t[0-9a-z]+)"')) {
         # The name is taken by a live terminal (an earlier boot) or is not a valid hc name (non-ASCII): an unnamed terminal, still labelled.
         $created = & $Hc --json run --bg --no-parent --no-notify --cwd $env:USERPROFILE --label "dori.group=$label" --label 'dori.role=lead' | Out-String
     }
-    $pane = ([regex]::Match($created, '"address":"(t\d+)"')).Groups[1].Value
+    $pane = ([regex]::Match($created, '"address":"(t[0-9a-z]+)"')).Groups[1].Value
     $workspace = $label
     if (-not $pane) { Log "hc run failed: $created"; exit 1 }
     if (-not $NoLaunch) { Start-Process wt.exe -ArgumentList 'hc', 'attach', $pane; Log "hc attach $pane opened in Windows Terminal" }
