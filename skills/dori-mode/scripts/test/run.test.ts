@@ -3,7 +3,8 @@ import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "no
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import { batArg, type CommandSys, resolveCommand, run } from "../src/run.ts";
+import { type CommandSys, resolveCommand, run } from "../src/run.ts";
+import { batArg } from "../src/run-windows.ts";
 
 const NODE_DIR = "C:\\nodejs";
 const files: Record<string, string> = {

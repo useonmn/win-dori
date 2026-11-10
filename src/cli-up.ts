@@ -3,7 +3,7 @@ import { join } from "node:path";
 import { promptsDir, type Deps } from "./harness.ts";
 import { refText } from "./refs.ts";
 import { groupId } from "./runtime/group.ts";
-import { formatRef, openSession, type SessionRef } from "./runtime/types.ts";
+import { openSession, type SessionRef } from "./runtime/types.ts";
 import { RuntimeChoiceError } from "./runtime/select.ts";
 import { openForShell } from "./session-open.ts";
 import { appendArg, type PaneShell } from "./shell.ts";
@@ -83,7 +83,7 @@ export function status(d: Deps): void {
     const last = l.log.at(-1);
     const age = Math.round((d.now() - l.lastActivityAt) / 60_000);
     console.log(
-      `${l.key.padEnd(24)} ${l.status.padEnd(8)} ${l.sessionRef.runtime.padEnd(5)} ${formatRef(l.sessionRef).padEnd(14)} active ${age}m ago  ${last ? `${last.kind}: ${last.text.slice(0, 60)}` : ""}`,
+      `${l.key.padEnd(24)} ${l.status.padEnd(8)} ${l.sessionRef.runtime.padEnd(5)} ${refText(l.sessionRef).padEnd(14)} active ${age}m ago  ${last ? `${last.kind}: ${last.text.slice(0, 60)}` : ""}`,
     );
   }
 }

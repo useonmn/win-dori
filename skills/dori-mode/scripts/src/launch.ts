@@ -1,17 +1,18 @@
 import { homedir } from "node:os";
-import { fileURLToPath } from "node:url";
 
-import { type DoriConfig, fill, type PaneShellSetting } from "./config.ts";
+import { fill } from "./config.ts";
 import type { FlowDeps } from "./done-flow.ts";
 import { laneGoalActive } from "./goal-record.ts";
+import { BRIEF_START, footer, originalBrief } from "./launch-footer.ts";
 import { parseRef, type SessionRef } from "../../../../src/runtime/types.ts";
 import { LANE_KEY, type Lane, RESERVED_LANE_KEY, sessionFields, upgradeLane } from "./registry.ts";
 import { iso, runtimesOf } from "./run.ts";
 import { readScreen, statusLookup } from "./sessions.ts";
-import { baseName, IS_WINDOWS, laneEnv, scrubLocalPaths } from "./paths.ts";
+import { paneCommand, resolvePaneShell } from "./pane-shell.ts";
+import { laneEnv, scrubLocalPaths } from "./paths.ts";
 import { Reports } from "./reports.ts";
 import { doneSyntaxErrors } from "./signals.ts";
-import type { BudgetLimits } from "./supervision.ts";
+import type { BudgetLimits } from "./supervision-observe.ts";
 import { Lessons, renderLessons } from "./lessons.ts";
 
 export type LaunchInput = {
@@ -55,59 +56,6 @@ export const validateLaunch = async (deps: FlowDeps, input: LaunchInput): Promis
     if (value != null && (!Number.isFinite(value) || value < 0)) throw new LaunchError(`invalid ${name} ceiling`);
   }
 };
-
-// The footer names this CLI by path: a bare `dori` can resolve to the root harness, whose `report` accepts unknown
-// flags and writes no journal, so a jsonl-v1 lane would read NO-REPORT for its whole life.
-export const shellQuote = (s: string): string => (/^[\w@%+=:,./-]+$/.test(s) ? s : `'${s.replace(/'/g, "'\\''")}'`);
-// On Windows the path is written with forward slashes: bun, pwsh, cmd and Git Bash all take C:/..., and a path with
-// no space then stays bare instead of being quoted for its backslashes.
-export const cliCommand = (
-  path: string = fileURLToPath(new URL("./cli.ts", import.meta.url)),
-  windows = IS_WINDOWS,
-): string => `bun ${shellQuote(windows ? path.replace(/\\/g, "/") : path)}`;
-const CLI = cliCommand();
-
-const FOOTER_HEADING = "## Lane footer (written by dori launch)";
-const BRIEF_START = "<!-- dori launch: the brief starts below -->";
-const FOOTER_START = "<!-- dori launch: footer start -->";
-const FOOTER_END = "<!-- dori launch: footer end -->";
-
-// startLane writes the launch text over the brief before the tab exists, so a retry after a failed tab create reads a
-// brief that already has lessons and a footer. Rebuild from the text between the markers launch wrote, so a retry ships
-// what a first launch would. Only a file that ends with launch's footer is cut: the owner's text may quote the heading.
-const originalBrief = (text: string): string => {
-  const brief = text.replace(/\s*$/, "");
-  const foot = brief.endsWith(FOOTER_END) ? brief.lastIndexOf(`\n${FOOTER_START}\n`) : -1;
-  if (foot === -1) return brief;
-  const start = brief.indexOf(`${BRIEF_START}\n`);
-  return brief.slice(start === -1 || start > foot ? 0 : start + BRIEF_START.length + 1, foot).replace(/\s*$/, "");
-};
-
-export const footer = (lane: Lane, leadPane: string, identities: DoriConfig["repoIdentities"] = {}): string =>
-  [
-    "",
-    FOOTER_START,
-    FOOTER_HEADING,
-    `- Key: ${lane.key}. Work thread: ${lane.thread}.`,
-    `- Done = ${lane.done}. The lane closes only when every signal reads back live.`,
-    `- Persist each milestone, blocker, question, halt and completion with ${CLI} report ${lane.key} --kind milestone|blocker|question|halted|done --text "what, with evidence links". It appends reports.jsonl and prints the human [REPORT] line; send that line to pane ${leadPane || "(lead pane)"} as an argv array, never a shell string.`,
-    ...(Object.keys(identities).length
-      ? [
-          "- Before committing, set the repository's identity below for that command only; never change the global Git identity. For a repository not listed, ask the lead for its identity before the first commit.",
-          ...Object.entries(identities).map(
-            ([repo, identity]) =>
-              `  - ${repo}: git -c user.name=${quoteForPane(identity.name)} -c user.email=${quoteForPane(identity.email)} commit ...`,
-          ),
-        ]
-      : []),
-    `- Before claiming PR work done, run ${CLI} verify-pr <owner/repo> <number>. A PR with source fix commits must change a test or carry a "No test: <reason>" line in its body; a fix commit without its own test is a warning. Run the printed UI test loop at the reported head before calling those tests stable.`,
-    `- After each completed step: ${CLI} checkpoint ${lane.key} --step <unique-step> --result <result> --evidence <path-or-URL> [--remote-effect <completed-push/merge/deploy-receipt>] (one flag per receipt).`,
-    `- On resume, run ${CLI} checkpoints ${lane.key} before doing work. Never repeat a recorded remote side effect. If a crash may have happened between the remote action and checkpoint, read the live remote receipt first and use the service's idempotency key; a local journal cannot make that remote action atomic.`,
-    `- Supervision ceilings: ${JSON.stringify(lane.budget ?? {})}. A breach marks blocked and alerts; it never kills the agent. Report a blocker and wait for the lead's decision rather than overriding the ceiling.`,
-    `- When done: ${CLI} claim-done ${lane.key} --evidence "<merge SHA, closed issue, version>". See references/done-protocol.md.`,
-    FOOTER_END,
-    "",
-  ].join("\n");
 
 export const adoptLane = async (deps: FlowDeps, input: LaunchInput & { readonly pane: string }): Promise<Lane> => {
   await validateLaunch(deps, input);
@@ -263,78 +211,3 @@ export const lastLines = (screen: string, home = homedir()): string =>
       .join(" / "),
     home,
   ).slice(0, 240) || "(blank)";
-
-export const quoteForPane = (arg: string): string =>
-  /^[\w./:@=-]+$/.test(arg) ? arg : `'${arg.replace(/'/g, `'\\''`)}'`;
-
-export type PaneShell = "posix" | "pwsh" | "powershell" | "cmd";
-
-const PS_QUOTES = /['\u2018\u2019\u201A\u201B]/g;
-const psLiteral = (s: string): string => `'${s.replace(PS_QUOTES, (c) => c + c)}'`;
-
-// PowerShell 5.1's own test for wrapping an argument: whitespace outside quotes, counting an escaped quote as a quote.
-const ps51Wraps = (s: string): boolean => {
-  let quotes = 0;
-  for (const c of s) {
-    if (c === '"') quotes++;
-    else if (/\s/.test(c) && quotes % 2 === 0) return true;
-  }
-  return false;
-};
-
-// Windows PowerShell 5.1 hands a native command's arguments over without escaping: it only wraps an argument that
-// contains whitespace in quotes and drops empty ones. Escape for CommandLineToArgvW ourselves.
-// When 5.1 would not wrap, as for `"b c"`, the quotes are written so it still does not, with `""` for a quote.
-const legacyArg = (arg: string): string => {
-  if (arg === "") return '""';
-  const s = arg.replace(/(\\*)"/g, '$1$1\\"');
-  if (!/\s/.test(arg)) return s;
-  if (ps51Wraps(s)) return s.replace(/(\\+)$/, "$1$1");
-  return `"${arg.replace(/(\\*)"/g, '$1$1""').replace(/(\\+)$/, "$1$1")}"`;
-};
-
-const encodedCommand = (script: string): string => Buffer.from(script, "utf16le").toString("base64");
-
-/**
- * The line to type into a pane so that the program receives exactly `argv`. cmd.exe cannot quote % and ^ reliably, so
- * for cmd the PowerShell 5.1 form is passed through -EncodedCommand (base64 of UTF-16LE), which contains no cmd
- * metacharacter at all.
- */
-export const paneCommand = (argv: readonly string[], shell: PaneShell): string => {
-  if (shell === "posix") return argv.map(quoteForPane).join(" ");
-  if (shell === "pwsh") return `& ${argv.map(psLiteral).join(" ")}`;
-  const ps = `& ${argv.map((a, i) => psLiteral(i === 0 ? a : legacyArg(a))).join(" ")}`;
-  return shell === "powershell" ? ps : `powershell -NoProfile -EncodedCommand ${encodedCommand(ps)}`;
-};
-
-export const shellFromProcess = (name: string): PaneShell | undefined => {
-  const n = baseName(name)
-    .toLowerCase()
-    .replace(/\.exe$/, "");
-  return n === "pwsh" || n === "powershell" || n === "cmd"
-    ? n
-    : /^(bash|sh|zsh|dash|fish)$/.test(n)
-      ? "posix"
-      : undefined;
-};
-
-type Foreground = readonly { readonly name?: string; readonly argv0?: string; readonly argv?: readonly string[] }[];
-
-/** The shell of a new session from its foreground processes (the runtime's probe); pwsh when it cannot be read. */
-export const resolvePaneShell = async (
-  setting: PaneShellSetting | undefined,
-  foreground: () => Promise<Foreground | undefined>,
-  windows = IS_WINDOWS,
-): Promise<PaneShell> => {
-  if (setting && setting !== "auto") return setting;
-  if (!windows) return "posix";
-  try {
-    for (const p of (await foreground()) ?? []) {
-      for (const name of [p.name, p.argv0, p.argv?.[0]]) {
-        const found = name ? shellFromProcess(name) : undefined;
-        if (found) return found;
-      }
-    }
-  } catch {}
-  return "pwsh";
-};

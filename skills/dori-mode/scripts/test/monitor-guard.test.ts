@@ -8,12 +8,12 @@ import {
   type GuardDeps,
   lockPath,
   monitorChain,
-  monitorStatus,
   readLock,
   scanMonitors,
   takeMonitor,
-  watchWinProcess,
 } from "../src/monitor-guard.ts";
+import { monitorStatus } from "../src/monitor-guard-status.ts";
+import { watchWinProcess } from "../src/monitor-guard-win.ts";
 import type { WinProc } from "../src/win-process.ts";
 import { withState } from "./fakes.ts";
 

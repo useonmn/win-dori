@@ -71,7 +71,7 @@ jobs:
           chmod +x "$HOME/.local/bin/herdr"
           echo "$HOME/.local/bin" >> "$GITHUB_PATH"
       - run: herdr --version
-      - run: bun test test/e2e.test.ts
+      - run: bun test test/e2e.test.ts test/e2e-shells.test.ts
 
   e2e-hc:
     runs-on: ubuntu-latest
