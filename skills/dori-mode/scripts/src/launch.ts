@@ -14,6 +14,7 @@ import { Reports } from "./reports.ts";
 import { doneSyntaxErrors } from "./signals.ts";
 import type { BudgetLimits } from "./supervision-observe.ts";
 import { Lessons, renderLessons } from "./lessons.ts";
+import { laneTokenEnv } from "./slack-token.ts";
 
 export type LaunchInput = {
   readonly key: string;
@@ -133,10 +134,13 @@ const startLane = async (
   let ref: SessionRef;
   try {
     // The lane reports into this home: the skill resolves only these two, never DORI_HOME (#197).
-    const env: Record<string, string> = { DORI_CONFIG: configPath(), DORI_STATE_DIR: deps.config.stateDir };
-    // The core's env is not the launcher's: pass this home's Slack token so the lane posts as this home's bot.
-    const token = process.env["DORI_SLACK_TOKEN"];
-    if (token) env["DORI_SLACK_TOKEN"] = token;
+    // The core's env is not the launcher's: the token file's path (never the token, #200) makes the lane post as this
+    // home's bot.
+    const env: Record<string, string> = {
+      DORI_CONFIG: configPath(),
+      DORI_STATE_DIR: deps.config.stateDir,
+      ...laneTokenEnv(process.env, configPath()),
+    };
     const spec = { name: input.key, role: "lane", container: "tab", cwd, env } as const;
     ref = await rts.default.create(group === undefined ? spec : { ...spec, group });
   } catch (e) {

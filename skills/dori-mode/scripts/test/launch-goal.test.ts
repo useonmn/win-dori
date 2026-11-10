@@ -107,26 +107,3 @@ test("launch opens the lane with DORI_CONFIG and DORI_STATE_DIR of this home, so
   expect(hasEnv("DORI_CONFIG", join(home, "config.json"))).toBe(true);
   expect(hasEnv("DORI_STATE_DIR", join(home, "state"))).toBe(true);
 });
-
-test("launch passes the launcher's DORI_SLACK_TOKEN to the lane, so it posts as this home's bot", async () => {
-  const brief = join(state.dir, "brief.md");
-  writeFileSync(brief, "# brief\n");
-  const before = process.env["DORI_SLACK_TOKEN"];
-  const envOf = async (key: string, token: string | undefined): Promise<string> => {
-    if (token === undefined) delete process.env["DORI_SLACK_TOKEN"];
-    else process.env["DORI_SLACK_TOKEN"] = token;
-    world = newWorld();
-    const deps = depsFor(world, fakeClock(T0), join(state.dir, "state"), { runtime: "hc" });
-    await launchLane(deps, { key, title: "t", brief, done: "closed acme/app#3" });
-    const create = world.calls.find((c) => c[0] === "hc" && c[2] === "run") ?? [];
-    return create.join(" ");
-  };
-  try {
-    expect(await envOf("token-lane", "xoxb-test-launcher")).toMatch(/DORI_SLACK_TOKEN\W+xoxb-test-launcher/);
-    expect(await envOf("bare-token-lane", undefined)).not.toContain("DORI_SLACK_TOKEN");
-    expect(await envOf("empty-token-lane", "")).not.toContain("DORI_SLACK_TOKEN");
-  } finally {
-    if (before === undefined) delete process.env["DORI_SLACK_TOKEN"];
-    else process.env["DORI_SLACK_TOKEN"] = before;
-  }
-});
