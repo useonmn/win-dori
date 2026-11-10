@@ -189,24 +189,3 @@ test.skipIf(process.platform !== "win32" || process.arch !== "x64")(
     expect(readProcessEnv(0)).toBeUndefined();
   },
 );
-
-test("dori's own process and its ancestors inside the agent tree never count as the pane's session", async () => {
-  const table: Proc[] = [
-    { pid: 10, ppid: 1, cmd: "zsh" },
-    { pid: 11, ppid: 10, cmd: "omo --model x" },
-    { pid: 20, ppid: 11, cmd: "bash -c dori sync" },
-    { pid: 21, ppid: 20, cmd: "bun dori sync" },
-    { pid: 12, ppid: 11, cmd: "bun tool" },
-  ];
-  const env: Record<number, string> = { 20: OTHER, 21: OTHER, 12: ID };
-  const readEnv = (pid: number) => (env[pid] ? { PI_SESSION_ID: env[pid] } : undefined);
-  const hit = await resolveSession(P1, "C:\\repo", table, {
-    run: fake([]),
-    sessionsDir: "/s",
-    windows: true,
-    readEnv,
-    selfPid: 21,
-    listDir: () => [],
-  });
-  expect(hit).toEqual({ id: ID, via: "child-env", pid: 11 });
-});

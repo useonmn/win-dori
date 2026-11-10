@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, expect, test } from "bun:test";
 import { join } from "node:path";
 
-import { ConfigError, defaultConfig, envFilePath, expandHome, fill, loadConfig, loadEnvFile } from "../src/config.ts";
+import { ConfigError, defaultConfig, expandHome, fill, loadConfig } from "../src/config.ts";
 import { footer } from "../src/launch-footer.ts";
 import { withState } from "./fakes.ts";
 
@@ -29,18 +29,6 @@ test("a missing config file falls back to defaults and DORI_STATE_DIR wins over 
   const c = await loadConfig("/nonexistent/config.json", "/home/ana");
   expect(c.stateDir).toBe(state.dir);
   expect(c.agentCommand).toEqual(["omo", "--model", "{model}", "{prompt}"]);
-});
-
-test("the secrets file wins over an inherited value, keeps = inside values, and skips comments; a missing file changes nothing", async () => {
-  const path = join(state.dir, "slack.env");
-  await Bun.write(path, "# comment\r\nDORI_SLACK_TOKEN=xoxb-from-file\r\nDORI_SLACK_CHANNEL=C1\nODD=a=b\n\n");
-  const env: Record<string, string | undefined> = { DORI_SLACK_TOKEN: "xoxb-stale-inherited", OTHER: "kept" };
-  await loadEnvFile(path, env);
-  expect(env).toEqual({ DORI_SLACK_TOKEN: "xoxb-from-file", DORI_SLACK_CHANNEL: "C1", ODD: "a=b", OTHER: "kept" });
-  const untouched = { A: "1" };
-  await loadEnvFile(join(state.dir, "missing.env"), untouched);
-  expect(untouched).toEqual({ A: "1" });
-  expect(envFilePath("C:\\Users\\ana")).toBe(join("C:\\Users\\ana", ".dori", "slack.env"));
 });
 
 test("repoIdentities keys are matched as lowercase owner/repo, whatever case the file uses", async () => {

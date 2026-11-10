@@ -1,4 +1,4 @@
-import { mkdirSync, readFileSync, renameSync, rmSync } from "node:fs";
+import { mkdirSync, renameSync, rmSync } from "node:fs";
 import { dirname } from "node:path";
 import { IS_WINDOWS } from "./paths.ts";
 
@@ -66,16 +66,6 @@ export const writeJsonAtomic = async (path: string, data: unknown, ops: FsOps = 
     await renameRetrying(tmp, path, ops);
   } catch (e) {
     rmSync(tmp, { force: true });
-    throw e;
-  }
-};
-
-/** Reads and parses a JSON file; null when it is missing, including one removed after a directory listing. */
-export const readJsonFile = <T>(path: string): T | null => {
-  try {
-    return JSON.parse(readFileSync(path, "utf8")) as T;
-  } catch (e) {
-    if ((e as NodeJS.ErrnoException).code === "ENOENT") return null;
     throw e;
   }
 };

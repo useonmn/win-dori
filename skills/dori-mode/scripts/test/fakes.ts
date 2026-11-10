@@ -13,6 +13,8 @@ export type World = {
   issueState: string;
   aheadCount: string | Record<string, string>;
   dirty: string | Record<string, string>;
+  /** `git worktree list --porcelain` output; defaults to a cwd plus one lane-owned worktree. */
+  worktreeList?: string;
   /** `git rev-parse --is-inside-work-tree` answer; a lane whose cwd is not a checkout gets "false". */
   isGitRepo?: string;
   stuckReads: number;
@@ -31,8 +33,6 @@ export type World = {
   onEnterStatus?: string;
   /** Screens returned by successive reads; falls back to `screen` when empty. */
   screens?: string[];
-  /** Overrides the `git worktree list --porcelain` output. */
-  worktreeList?: string;
   /** hc terminals by address, for lanes on the hc runtime. */
   terminals: Record<string, HcTerm>;
   calls: string[][];

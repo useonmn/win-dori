@@ -66,7 +66,6 @@ function setup(shell: string) {
         HOME: home,
         DORI_SRC: src,
         SKILLS_DIR: join(home, "skills"),
-        DORI_HOME: join(home, ".dori"),
         DORI_NO_DEPS: "1",
         DORI_SKIP_PROFILE: "1",
         DORI_NO_USER_ENV: "1",

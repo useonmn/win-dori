@@ -1,6 +1,7 @@
-import { existsSync, readdirSync } from "node:fs";
+import { readdirSync } from "node:fs";
 import { join } from "node:path";
-import { readJsonFile, writeJsonAtomic } from "./fsx.ts";
+
+import { writeJsonAtomic } from "./fsx.ts";
 import { HerdrRuntime } from "../../../../src/runtime/herdr/index.ts";
 import type { SessionRef } from "../../../../src/runtime/types.ts";
 import type { BudgetLimits } from "./supervision-observe.ts";
@@ -108,10 +109,11 @@ export class Registry {
   }
 
   async read(key: string): Promise<Lane | null> {
-    const lane = readJsonFile<Lane>(this.path(key));
-    return lane ? upgradeLane(lane) : null;
+    const f = Bun.file(this.path(key));
+    return (await f.exists()) ? upgradeLane((await f.json()) as Lane) : null;
   }
 
+  // temp file + rename so a concurrent reader never sees a half-written lane
   async write(lane: Lane): Promise<void> {
     await writeJsonAtomic(this.path(lane.key), lane);
   }
@@ -130,10 +132,7 @@ export class Registry {
 
   async list(): Promise<Lane[]> {
     const lanes: Lane[] = [];
-    for (const f of this.files()) {
-      const lane = readJsonFile<Lane>(f);
-      if (lane) lanes.push(upgradeLane(lane));
-    }
+    for (const f of this.files()) lanes.push(upgradeLane((await Bun.file(f).json()) as Lane));
     return lanes;
   }
 
@@ -143,14 +142,8 @@ export class Registry {
     const unreadable: string[] = [];
     for (const f of this.files()) {
       try {
-        const lane: unknown = readJsonFile<unknown>(f);
-        // readJsonFile gives null for a file removed after the listing (skipped, as in list()) and for one holding JSON
-        // null, which is no lane record.
-        if (lane === null) {
-          if (existsSync(f)) throw new Error("not a lane record");
-          continue;
-        }
-        if (typeof lane !== "object" || !("key" in lane) || typeof lane.key !== "string")
+        const lane: unknown = await Bun.file(f).json();
+        if (typeof lane !== "object" || lane === null || !("key" in lane) || typeof lane.key !== "string")
           throw new Error("not a lane record");
         lanes.push(upgradeLane(lane as Lane));
       } catch {

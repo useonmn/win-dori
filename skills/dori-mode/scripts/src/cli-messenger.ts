@@ -6,7 +6,7 @@ import { Slack } from "./messenger/slack.ts";
 import { pollSlackInbound } from "./messenger/slack-inbound.ts";
 import { slackPresence } from "./messenger/slack-presence.ts";
 import { Telegram } from "./messenger/telegram.ts";
-import { envInt, fileTgInboundStore, telegramInboundLoop, telegramOwnerVar } from "./messenger/telegram-inbound.ts";
+import { envInt, fileTgInboundStore, telegramInboundLoop } from "./messenger/telegram-inbound.ts";
 import { formatTelegramInbound } from "./messenger/telegram-line.ts";
 import { ThreadLedger } from "./messenger/thread-ledger.ts";
 import { realTimers } from "./messenger/typing.ts";
@@ -113,7 +113,7 @@ const telegramInbound = async (stateDir: string, minutes: number): Promise<void>
       return die(e instanceof Error ? e.message : String(e));
     }
   };
-  const ownerId = num(telegramOwnerVar(process.env));
+  const ownerId = num("DORI_TELEGRAM_OWNER_ID");
   const groupChatId = process.env["DORI_TELEGRAM_GROUP_ID"] === undefined ? undefined : num("DORI_TELEGRAM_GROUP_ID");
   const topicId = process.env["DORI_TELEGRAM_TOPIC_ID"] === undefined ? undefined : num("DORI_TELEGRAM_TOPIC_ID");
   console.log(`INBOUND_READY telegram owner=${ownerId} group=${groupChatId ?? "-"} topic=${topicId ?? "-"}`);

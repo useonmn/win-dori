@@ -11,7 +11,7 @@ Il tuo ingegnere 24/7, nella chat che usi già.
 [![CI](https://github.com/useonmn/win-dori/actions/workflows/ci.yml/badge.svg)](https://github.com/useonmn/win-dori/actions/workflows/ci.yml)
 [![License: SUL-1.0](https://img.shields.io/badge/license-SUL--1.0-blue.svg)](LICENSE)
 
-> **win-dori è il port per Windows di [sisyphuslabs/dori-superagent](https://github.com/sisyphuslabs/dori-superagent).** Dori e dori-superagent sono un progetto di Sisyphus Labs; win-dori segue il commit upstream [97d807b](https://github.com/sisyphuslabs/dori-superagent/commit/97d807b9037cb050a72129659cf6306d8055010d) e mantiene il comportamento e i valori predefiniti di upstream. Aggiunge solo ciò che serve a Windows: l'installazione da PowerShell, pane che riconoscono la propria shell e un profilo Windows con avvio automatico e listener Slack. Il merito di Dori va agli autori upstream, i bug nelle parti Windows sono nostri. Le issue di upstream vanno su [sisyphuslabs/dori-superagent/issues](https://github.com/sisyphuslabs/dori-superagent/issues).
+> **win-dori è il port per Windows di [sisyphuslabs/dori-superagent](https://github.com/sisyphuslabs/dori-superagent).** Dori e dori-superagent sono un progetto di Sisyphus Labs; win-dori segue il commit upstream [97d807b](https://github.com/sisyphuslabs/dori-superagent/commit/97d807b9037cb050a72129659cf6306d8055010d) e mantiene il comportamento e i valori predefiniti di upstream. Aggiunge solo ciò che serve a Windows: l'installazione da PowerShell, pane che riconoscono la propria shell e un profilo Windows con avvio automatico. Il merito di Dori va agli autori upstream, i bug nelle parti Windows sono nostri. Le issue di upstream vanno su [sisyphuslabs/dori-superagent/issues](https://github.com/sisyphuslabs/dori-superagent/issues).
 
 > **Licenza.** Da questo port win-dori è sotto la [Sustainable Use License](LICENSE), come upstream: solo uso personale, uso interno aziendale e uso non commerciale gratuito. [NOTICE.md](NOTICE.md) dice cosa ha modificato win-dori. Le versioni fino a `fa86ddf` erano MIT e restano MIT.
 
@@ -55,38 +55,24 @@ La creazione del bot e il completamento del suo login passano da [agent-messenge
 
 ## Avvio rapido
 
-Qui ci sono due programmi. In win-dori l'harness si chiama `dori-harness` (upstream lo chiama `dori`) e la CLI di messaggistica del Dori mode si chiama `dori`, quindi possono stare entrambi sulla stessa macchina. Dove il testo di upstream dice `dori up` o `dori merge`, win-dori usa `dori-harness up` e `dori-harness merge`.
+Entrambe le installazioni mettono nel PATH un comando chiamato `dori`, quindi installane una per macchina. Su una macchina che le ha tutte e due, lancia l'harness come `bun src/cli.ts` e lascia `dori` a Dori mode; i prompt dell'harness lo chiamano comunque con il percorso completo.
 
 ### Windows
 
-In PowerShell, da qualsiasi cartella:
+In PowerShell:
 
 ```powershell
 irm https://raw.githubusercontent.com/useonmn/win-dori/main/install.ps1 | iex
 ```
 
-Da un checkout puoi anche lanciare `install.cmd` in cmd.exe; chiama `install.ps1` con gli stessi argomenti.
-
-Questa riga è tutta l'installazione. Serve git (se manca e c'è winget, installa `Git.Git`) e installa bun e herdr con i loro installer ufficiali quando mancano (`DORI_NO_DEPS=1` lo disattiva). Installa in `%USERPROFILE%\.dori\src`, e rilanciarla aggiorna quella copia (`DORI_NO_PULL=1` salta il pull). Collega lo skill in `%USERPROFILE%\.agents\skills\dori-mode` come directory junction, quindi non servono diritti di amministratore né la modalità sviluppatore. Esegue `bun install` e `bun link` e aggiunge la cartella bin globale di bun al PATH utente. Poi installa il profilo Windows da `profile/`. `DORI_SKIP_PROFILE=1` lo salta e copia invece la configurazione di esempio in `%USERPROFILE%\.dori\config.json`. `DORI_SRC`, `SKILLS_DIR` e `DORI_HOME` cambiano quei percorsi, e `DORI_REPO` punta a un fork. Alla fine apri un nuovo terminale, così il PATH aggiornato vale.
-
-Poi apri herdr, avvia omo al suo interno e di' "Dori mode".
-
-### Profilo Windows
-
-Il profilo tiene il Dori in funzione anche dopo un riavvio, qualunque messenger tu scelga: uno script di avvio, una configurazione, un'attività di avvio automatico e, per Slack, un listener in entrata in Socket Mode con le regole dei canali e il manifest dell'app. Niente al suo interno nomina un utente, una cartella o un canale; ogni percorso viene da `%USERPROFILE%` e ogni id dai tuoi token.
-
-La prima volta che dici "Dori mode", il Dori si configura da solo nella conversazione. Chiede il messenger e apre un file di Blocco note che solo tu puoi leggere per i token (non incollare mai un token in chat). `dori setup <messenger>` li verifica, ricava gli id che può, salva `%USERPROFILE%\.dori\<messenger>.env` (`slack.env`, `telegram.env` o `discord.env`) leggibile solo dal tuo utente Windows e registra l'attività `Dori Autostart`. Da lì in poi, all'accesso parte herdr, si apre un workspace con il nome del tuo Dori e l'agente si avvia lì.
-
-Il listener Slack segna ogni messaggio preso in carico con una reazione a occhi e uno stato di lavoro nel thread, e sostituisce gli occhi con una spunta quando il Dori risponde.
-
-Rilanciare il passo del profilo è sicuro. I file che hai modificato restano e la differenza viene mostrata; `config.json` viene solo creato, mai sostituito. `DORI_DRY_RUN=1` mostra un'anteprima, `DORI_FORCE=1` sostituisce i file modificati e tiene una copia `.bak-<time>`, `DORI_NO_TASK=1` non registra mai l'attività, e ogni esecuzione scrive `%USERPROFILE%\.dori\undo-profile-<time>.ps1`, che la annulla. [profile/INVENTORY.md](profile/INVENTORY.md) elenca ogni pezzo, e `profile\install-profile.ps1 -DryRun` dal checkout esegue solo il passo del profilo.
+Da un checkout di [useonmn/win-dori](https://github.com/useonmn/win-dori) si usa invece `.\install.ps1`. Installa git con winget se manca, e bun e herdr (o hc, quando il runtime scelto è hc) con i loro installer ufficiali. Clona win-dori in `%USERPROFILE%\.dori\src`, collega la skill in `%USERPROFILE%\.agents\skills\dori-mode` come directory junction e mette `dori` nel PATH utente. Poi installa il profilo Windows: uno script di avvio e un'attività dell'Utilità di pianificazione che avvia il tuo Dori quando accedi. I token del messenger sono variabili d'ambiente, come nella tabella sopra.
 
 ### Dori mode, il bot con cui parli
 
 Ti servono herdr, Bun 1.4.4 o successivo, git e la CLI di GitHub `gh`.
 
 ```sh
-curl -fsSL https://raw.githubusercontent.com/useonmn/win-dori/main/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/sisyphuslabs/dori-superagent/main/install.sh | bash
 ```
 
 Questo clona il repository in `~/.dori/src`, collega la skill in `~/.agents/skills/dori-mode`, collega `dori` nel tuo PATH e copia una config di esempio in `~/.dori/config.json`. Modifica almeno `leadPane` (il tuo pane di herdr, da `herdr pane current`), `laneWorkspace` e `defaultCwd`.
@@ -100,52 +86,45 @@ Il contratto operativo è [`skills/dori-mode/SKILL.md`](skills/dori-mode/SKILL.m
 Ti servono Bun 1.4.4 o successivo, herdr, omo e `gh` (per gli SHA di head delle PR, i check e il merge).
 
 ```sh
-git clone https://github.com/useonmn/win-dori
-cd win-dori
+git clone https://github.com/sisyphuslabs/dori-superagent
+cd dori-superagent
 bun install
-bun link   # puts `dori-harness` on your PATH
+bun link   # puts `dori` on your PATH
 ```
 
 Avvia herdr, poi:
 
 ```sh
-dori-harness up
+dori up
 # UP runtime=herdr lead=w1:p1 duty=w1:p2 loop=w1:p3 hourly=w1:p4 home=~/.dori
 ```
 
 Questo apre un workspace di herdr chiamato `dori` con un pane lead (omo con `prompts/lead.md` aggiunto al suo system prompt), un pane duty (omo con `prompts/duty.md`), il duty loop sotto di esso e l'hourly loop ancora più sotto. Parla con il pane lead. Scrive un brief (obiettivo, input, deliverable, condizione di stop, vincoli; vedi [`examples/brief.md`](examples/brief.md)) e apre le lane da solo. Puoi fare lo stesso da una shell:
 
 ```sh
-dori-harness start fix-flaky-login --brief examples/brief.md
+dori start fix-flaky-login --brief examples/brief.md
 # STARTED fix-flaky-login pane=w1:p5 brief=~/.dori/briefs/fix-flaky-login.md
-dori-harness status
+dori status
 ```
 
 Dentro la lane, omo fa rapporto e chiude con i comandi che gli danno le regole della lane:
 
 ```sh
-dori-harness report fix-flaky-login --text 'reproduced: 1 failure in 20 runs, shared session fixture'
-dori-harness report fix-flaky-login --status waiting --text 'WAITING: checks on owner/repo#12'
-dori-harness ready fix-flaky-login --text 'root cause fixed in owner/repo#12, checks green' --evidence https://github.com/owner/repo/pull/12
+dori report fix-flaky-login --text 'reproduced: 1 failure in 20 runs, shared session fixture'
+dori report fix-flaky-login --status waiting --text 'WAITING: checks on owner/repo#12'
+dori ready fix-flaky-login --text 'root cause fixed in owner/repo#12, checks green' --evidence https://github.com/owner/repo/pull/12
 ```
 
 Il lead, su `[READY fix-flaky-login]`:
 
 ```sh
-dori-harness review owner/repo#12            # fresh omo reviewer pinned to the head SHA; writes a receipt; exit 0 on CLEAR
-dori-harness merge owner/repo#12 --dry-run   # MERGE_OK ... (dry run), or MERGE_REFUSED <why> with exit 2
-dori-harness merge owner/repo#12             # gh pr merge --squash --match-head-commit <sha>
-dori-harness done fix-flaky-login            # closes the lane's pane; only a READY lane can be closed
+dori review owner/repo#12            # fresh omo reviewer pinned to the head SHA; writes a receipt; exit 0 on CLEAR
+dori merge owner/repo#12 --dry-run   # MERGE_OK ... (dry run), or MERGE_REFUSED <why> with exit 2
+dori merge owner/repo#12             # gh pr merge --squash --match-head-commit <sha>
+dori done fix-flaky-login            # closes the lane's pane; only a READY lane can be closed
 ```
 
 `bun src/cli.ts` senza argomenti stampa ogni comando con i suoi flag.
-
-### Note su Windows
-
-- I token stanno in `~/.dori/<messenger>.env`, mai nelle variabili d'ambiente dell'utente. `dori` legge da solo quel file (o quello in `DORI_ENV_FILE`). Per una shell usa e getta, impostali con `$env:DORI_SLACK_TOKEN = "xoxp-..."`.
-- L'harness digita comandi nei pane, quindi rileva la shell di ogni pane e mette le virgolette di conseguenza: pwsh, Windows PowerShell 5.1, cmd o Git Bash. `DORI_PANE_SHELL` (`posix`, `pwsh`, `powershell` o `cmd`) sostituisce il rilevamento.
-- Il guard dell'host legge carico, memoria, swap e disco con una sola chiamata a `powershell.exe`. Il carico è l'uso della CPU per il numero di CPU più la coda del processore, quindi oscilla più della media a 1 minuto di Unix.
-- I comandi `Done =` sono liste argv come `["bun","test"]`, così la stessa riga funziona su Windows, macOS e Linux.
 
 ## Come funziona l'harness
 
@@ -153,18 +132,18 @@ dori-harness done fix-flaky-login            # closes the lane's pane; only a RE
 
 Tre ruoli, ognuno una sessione omo in un pane di herdr. herdr fornisce workspace, tab e pane, riconosce omo in un pane come agente e ne riporta lo stato (idle, working, blocked, done) tramite la sua CLI. dori legge quello stato prima di fare qualsiasi cosa a un pane.
 
-Il lead è l'unica sessione che ti parla. Trasforma una richiesta in un brief, apre una lane con `dori-harness start`, legge quello che le lane rimandano e fa il merge.
+Il lead è l'unica sessione che ti parla. Trasforma una richiesta in un brief, apre una lane con `dori start`, legge quello che le lane rimandano e fa il merge.
 
-Una lane è una sessione omo nella propria tab di herdr, avviata con un brief a cui sono aggiunte le regole della lane (`prompts/lane-footer.md`). Segnala le milestone con `dori-harness report` e chiude con `dori-harness ready`, che non invia nulla senza un link di prova.
+Una lane è una sessione omo nella propria tab di herdr, avviata con un brief a cui sono aggiunte le regole della lane (`prompts/lane-footer.md`). Segnala le milestone con `dori report` e chiude con `dori ready`, che non invia nulla senza un link di prova.
 
-Il duty loop è `dori-harness duty --interval 60`, un semplice processo in un pane accanto a una sessione omo di duty. A ogni tick svuota i messaggi in coda nei pane diventati idle, sollecita le lane rimaste in silenzio, passa la questione al lead e segna come persa una lane il cui pane è sparito. `dori-harness duty stop --text 'why'` è il suo interruttore di emergenza; finché non dai `dori-harness duty resume`, ogni tick stampa solo il motivo per cui è fermo.
+Il duty loop è `dori duty --interval 60`, un semplice processo in un pane accanto a una sessione omo di duty. A ogni tick svuota i messaggi in coda nei pane diventati idle, sollecita le lane rimaste in silenzio, passa la questione al lead e segna come persa una lane il cui pane è sparito. `dori duty stop --text 'why'` è il suo interruttore di emergenza; finché non dai `dori duty resume`, ogni tick stampa solo il motivo per cui è fermo.
 
-L'hourly loop è `dori-harness loop`, avviato da `dori-harness up` in un quarto pane. Il lavoro aspetta in un backlog sotto `~/.dori/backlog/`, un brief per elemento, aggiunto dal lead o importato dalle issue GitHub che portano un'etichetta:
+L'hourly loop è `dori loop`, avviato da `dori up` in un quarto pane. Il lavoro aspetta in un backlog sotto `~/.dori/backlog/`, un brief per elemento, aggiunto dal lead o importato dalle issue GitHub che portano un'etichetta:
 
 ```sh
-dori-harness backlog add search-index --brief briefs/search.md --priority 2
-dori-harness backlog add new-billing --brief briefs/billing.md --decision 'charge per seat or per workspace?'
-dori-harness backlog import owner/repo --label dori     # label p1..p9 sets the priority, needs-decision marks a question
+dori backlog add search-index --brief briefs/search.md --priority 2
+dori backlog add new-billing --brief briefs/billing.md --decision 'charge per seat or per workspace?'
+dori backlog import owner/repo --label dori     # label p1..p9 sets the priority, needs-decision marks a question
 ```
 
 Un'esecuzione che supera il suo gate (non fermata, non bloccata da un altro loop, almeno un intervallo dall'ultima esecuzione) prima sincronizza gli elementi con lo stato delle lane e delle PR. Poi controlla il lavoro trascurato: una lane in silenzio da 3 ore, una lane READY che nessuno ha chiuso da 2, un pane sparito. Poi prende i prossimi elementi aperti, entro `--max-lanes` (predefinito 3) lane aperte e `--max-starts` (predefinito 2) per esecuzione, finché l'host ha carico e memoria disponibili. Ogni domanda aperta arriva al lead una volta come `[DECIDE <id>]`, con un solo promemoria dopo 6 ore, e l'esecuzione termina con un unico rapporto `[LOOP ...]` al lead.
@@ -173,15 +152,15 @@ Il loop apre solo lane e invia messaggi; non fa mai merge, push né chiude un pa
 
 ![ciclo di vita della lane](docs/lane-flow.png)
 
-`dori-harness start <key> --brief FILE` scrive il brief più le regole della lane in `~/.dori/briefs/<key>.md`, apre una tab, lancia omo con un prompt che nomina il brief, registra la lane come `working` e invia al lead `[START <key>]`. Da lì la lane fa rapporto (`[REPORT <key>]`, oppure `[REPORT <key> WAITING]` quando è bloccata fuori dal proprio pane) e chiude con `[READY <key>]` più i suoi link di prova. Una lane che resta idle riceve un sollecito a 10 e 20 minuti e viene segnalata al lead a 40. Una lane il cui pane sparisce prima di READY viene riportata come `[LOST <key>]`.
+`dori start <key> --brief FILE` scrive il brief più le regole della lane in `~/.dori/briefs/<key>.md`, apre una tab, lancia omo con un prompt che nomina il brief, registra la lane come `working` e invia al lead `[START <key>]`. Da lì la lane fa rapporto (`[REPORT <key>]`, oppure `[REPORT <key> WAITING]` quando è bloccata fuori dal proprio pane) e chiude con `[READY <key>]` più i suoi link di prova. Una lane che resta idle riceve un sollecito a 10 e 20 minuti e viene segnalata al lead a 40. Una lane il cui pane sparisce prima di READY viene riportata come `[LOST <key>]`.
 
 Lo stato è JSON su disco sotto `~/.dori` (o `$DORI_HOME`): `lanes/`, `inbox/`, `briefs/`, `receipts/`, più `backlog/` e `loop/` per l'hourly loop e `duty/` per il file di stop del duty loop. Oltre alle sessioni degli agenti, gli unici processi di lunga durata che l'harness aggiunge sono i due loop, e l'unica dipendenza a runtime è Bun.
 
 ### Due runtime di sessione
 
-Le sessioni girano su herdr o su hc ([herdr-core](https://releases.herdr.dev/core/install.sh)), e una home può contenere sessioni su entrambi. L'harness parla con loro attraverso un'unica interfaccia in `src/runtime/`, e ogni lane e ruolo salvato ricorda quale runtime l'ha aperto, così i comandi su di esso vanno lì qualunque runtime sia selezionato. Le nuove sessioni si aprono sul runtime indicato da `DORI_RUNTIME`, altrimenti da `"runtime": "herdr"` o `"runtime": "hc"` in `$DORI_HOME/config.json`; senza nessuno dei due, Dori sceglie hc dentro un terminale hc, herdr dentro un pane herdr, e altrimenti hc se è installato, altrimenti herdr. hc è il runtime predefinito; solo con nessuno dei due nel PATH Dori rifiuta, con una correzione in una riga. `dori-harness status` stampa per prima la scelta, come `RUNTIME hc (from config)`. Su Windows hc si installa con l'installer ufficiale di herdr-core.
+Le sessioni girano su herdr o su hc ([herdr-core](https://releases.herdr.dev/core/install.sh)), e una home può contenere sessioni su entrambi. L'harness parla con loro attraverso un'unica interfaccia in `src/runtime/`, e ogni lane e ruolo salvato ricorda quale runtime l'ha aperto, così i comandi su di esso vanno lì qualunque runtime sia selezionato. Le nuove sessioni si aprono sul runtime indicato da `DORI_RUNTIME`, altrimenti da `"runtime": "herdr"` o `"runtime": "hc"` in `$DORI_HOME/config.json`; senza nessuno dei due, Dori sceglie hc dentro un terminale hc, herdr dentro un pane herdr, e altrimenti hc se è installato, altrimenti herdr. hc è il runtime predefinito; solo con nessuno dei due nel PATH Dori rifiuta, con una correzione in una riga. `dori status` stampa per prima la scelta, come `RUNTIME hc (from config)`.
 
-Su hc non ci sono workspace né tab: Dori apre un terminale etichettato per sessione, e lo stato di una sessione arriva solo dal rapporto dell'agente stesso (una sequenza OSC 7501, che le build recenti di omo inviano); un agente che non riferisce mai resta `unknown` e i suoi messaggi aspettano nell'inbox. `dori-harness migrate --to hc --all` (oppure `--lane <key>`, `--role duty-loop`, con `--dry-run` per vedere il piano) sposta le sessioni sull'altro runtime: cattura un brief di passaggio, apre la sessione sostitutiva, sposta l'inbox e chiude la vecchia sessione, stampando `MIGRATED`, `SKIP`, `DEFERRED` o `MIGRATE_ROLLBACK` per sessione. La corrispondenza verbo per verbo è in [`docs/runtime.md`](docs/runtime.md).
+Su hc non ci sono workspace né tab: Dori apre un terminale etichettato per sessione, e lo stato di una sessione arriva solo dal rapporto dell'agente stesso (una sequenza OSC 7501, che le build recenti di omo inviano); un agente che non riferisce mai resta `unknown` e i suoi messaggi aspettano nell'inbox. `dori migrate --to hc --all` (oppure `--lane <key>`, `--role duty-loop`, con `--dry-run` per vedere il piano) sposta le sessioni sull'altro runtime: cattura un brief di passaggio, apre la sessione sostitutiva, sposta l'inbox e chiude la vecchia sessione, stampando `MIGRATED`, `SKIP`, `DEFERRED` o `MIGRATE_ROLLBACK` per sessione. La corrispondenza verbo per verbo è in [`docs/runtime.md`](docs/runtime.md).
 
 ## Cosa impone l'harness
 
@@ -191,13 +170,13 @@ Il lead è l'unica sessione che ti parla (`prompts/lead.md`). Le regole della la
 
 ### READY richiede prove
 
-`dori-harness ready` rifiuta se manca almeno un link `--evidence` e se manca il testo della risposta finale. Entrambi vengono salvati nel record della lane, e `dori-harness done` rifiuta qualsiasi lane che non sia `ready`, quindi nessuna lane si chiude senza una risposta registrata.
+`dori ready` rifiuta se manca almeno un link `--evidence` e se manca il testo della risposta finale. Entrambi vengono salvati nel record della lane, e `dori done` rifiuta qualsiasi lane che non sia `ready`, quindi nessuna lane si chiude senza una risposta registrata.
 
 ### I pane occupati non vengono mai interrotti, e nulla viene inviato due volte
 
-`dori-harness send` chiede prima a herdr lo stato dell'agente nel pane. `idle` o `done` ricevono il messaggio subito; in tutti gli altri casi va in coda in `~/.dori/inbox/`, e il duty loop consegna la coda quando il pane diventa idle, in un unico blocco. In un pane con una shell in primo piano non si digita mai, perché il testo digitato verrebbe eseguito come comando.
+`dori send` chiede prima a herdr lo stato dell'agente nel pane. `idle` o `done` ricevono il messaggio subito; in tutti gli altri casi va in coda in `~/.dori/inbox/`, e il duty loop consegna la coda quando il pane diventa idle, in un unico blocco. In un pane con una shell in primo piano non si digita mai, perché il testo digitato verrebbe eseguito come comando.
 
-Quando una consegna fallisce dopo che il testo potrebbe essere già arrivato nel pane, più tardi viene premuto solo Invio, e solo nell'agente in cui era stato digitato; se herdr a quel punto vede un agente diverso, la voce resta in sospeso, il lead viene avvisato una volta con `[DELIVERY-AMBIGUOUS <pane>]`, e `dori-harness inbox ack` o `dori-harness inbox resend` la risolvono a mano.
+Quando una consegna fallisce dopo che il testo potrebbe essere già arrivato nel pane, più tardi viene premuto solo Invio, e solo nell'agente in cui era stato digitato; se herdr a quel punto vede un agente diverso, la voce resta in sospeso, il lead viene avvisato una volta con `[DELIVERY-AMBIGUOUS <pane>]`, e `dori inbox ack` o `dori inbox resend` la risolvono a mano.
 
 ### Solleciti a 10, 20 e 40 minuti
 
@@ -205,9 +184,9 @@ Una lane che non fa rapporto da 10 minuti, e il cui pane non sta lavorando, rice
 
 ### Il merge richiede una receipt CLEAR sull'head esatto e check verdi
 
-`dori-harness merge` legge con `gh` lo SHA di head della PR, poi richiede in `~/.dori/receipts/` una receipt per quello SHA con verdetto `CLEAR`. Solo `dori-harness review` scrive receipt: lancia un omo nuovo e non interattivo su `prompts/review.md`, fissato a quello SHA, e quando il reviewer non stampa una riga `VERDICT:` non viene scritta nessuna receipt.
+`dori merge` legge con `gh` lo SHA di head della PR, poi richiede in `~/.dori/receipts/` una receipt per quello SHA con verdetto `CLEAR`. Solo `dori review` scrive receipt: lancia un omo nuovo e non interattivo su `prompts/review.md`, fissato a quello SHA, e quando il reviewer non stampa una riga `VERDICT:` non viene scritta nessuna receipt.
 
-Poi `gh pr checks` deve restituire almeno un check, ogni check deve essere `pass` o `skipping`, e almeno uno deve essere `pass`. Una lista di check vuota viene rifiutata con "an empty check list is never green". Un push dopo la review cambia lo SHA di head, quindi la receipt non corrisponde più e `dori-harness review` va rilanciato.
+Poi `gh pr checks` deve restituire almeno un check, ogni check deve essere `pass` o `skipping`, e almeno uno deve essere `pass`. Una lista di check vuota viene rifiutata con "an empty check list is never green". Un push dopo la review cambia lo SHA di head, quindi la receipt non corrisponde più e `dori review` va rilanciato.
 
 ### Hook per i tuoi strumenti
 
@@ -306,10 +285,10 @@ dori invia conteggi d'uso anonimi nello stesso modo di omo: log OTLP/HTTP JSON a
 |---|---|---|
 | `dori.installed` | primo avvio | nessuno |
 | `dori.daily_active` | una volta per giorno UTC, con qualsiasi comando dori | `day_utc` |
-| `dori.lane_started` | `dori-harness start` | `open_lanes` |
-| `dori.lane_ready` | `dori-harness ready` | `evidence_count`, `lane_minutes` |
-| `dori.review_completed` | `dori-harness review` | `verdict`: `CLEAR` o `BLOCK` |
-| `dori.merge_decided` | `dori-harness merge` senza `--dry-run` | `outcome` |
+| `dori.lane_started` | `dori start` | `open_lanes` |
+| `dori.lane_ready` | `dori ready` | `evidence_count`, `lane_minutes` |
+| `dori.review_completed` | `dori review` | `verdict`: `CLEAR` o `BLOCK` |
+| `dori.merge_decided` | `dori merge` senza `--dry-run` | `outcome` |
 | `dori.duty_summary` | al massimo una volta all'ora, dal duty loop | `ticks`, `flushed`, `nudges`, `escalations`, `lost` |
 
 Ogni record riporta anche nome e versione del servizio, l'hash di installazione, un flag CI, tipo e versione del sistema operativo e l'architettura della CPU. Mai inviati: percorsi, nomi di repository, numeri di PR, chiavi delle lane, brief, messaggi o qualsiasi altro testo. Un comando aspetta l'invio al massimo 2 secondi, e un errore della telemetria non fa mai fallire un comando.
@@ -324,16 +303,14 @@ bun run ci                                        # biome, tsc, knip, the 250-li
 
 I test dell'harness girano contro un herdr finto, un hc finto e un gh finto, con un orologio che i test fanno avanzare; i test end-to-end avviano un vero server herdr o un vero core hc in una sessione isolata, con uno script di agente finto al posto di omo, e ognuno si salta da solo quando il suo binario non è nel PATH. I test di Dori mode girano contro herdr, git e gh finti e non toccano nulla di reale. La CI esegue gli stessi test su Ubuntu e macOS.
 
-Il profilo Windows ha i suoi test (solo Windows): `cd profile; bun test`. `bun scripts/check-paths.ts` fallisce quando un file tracciato contiene un percorso utente scritto a mano o un valore personale.
-
 ## Cosa non è
 
 L'harness è la versione minima, non il nostro stack di produzione. Lasciati fuori di proposito: la mesh tra macchine, lo scheduling degli heavy slot, i bridge verso chat e ticket tracker e le receipt per intere suite di test. Qui c'è la parte che gira solo con herdr e omo: ruoli, lane, inbox, duty loop, hourly loop e backlog, e il gate di review e merge. Dori mode è una CLI separata con i propri componenti di messaggistica, host guard e runner per heavy slot; l'harness non importa nulla da lì.
 
 ## Contribuire
 
-Ogni contributore firma una volta il [Contributor License Agreement](https://github.com/sisyphuslabs/dori-superagent/blob/main/CLA.md), commentando `I have read the CLA Document and I hereby sign the CLA` sulla sua prima pull request; il check CLA Assistant lo registra. I gate, i comandi di test e le regole per le pull request sono in [CONTRIBUTING.md](CONTRIBUTING.md).
+win-dori non ha un CLA. Una modifica non specifica di Windows va proposta a upstream, che chiede ai contributori di firmare il suo CLA, e arriva in win-dori con il port successivo. I gate, i comandi di test e le regole per le pull request sono in [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ## Licenza
 
-Dal port di upstream [7ac0ed7](https://github.com/sisyphuslabs/dori-superagent/commit/7ac0ed761dfb6aa0b3a81e8740a29cde5cbd0444), win-dori è sotto la [Sustainable Use License](LICENSE) versione 1.0, come upstream, con i componenti di terze parti sotto le loro licenze. Consente l'uso personale, l'uso interno aziendale e l'uso non commerciale gratuito; l'uso commerciale richiede una licenza dal titolare, Sisyphus Labs. [NOTICE.md](NOTICE.md) dice cosa ha modificato win-dori. Le versioni di win-dori fino a `fa86ddf` erano MIT e restano MIT. I prompt in `prompts/` sono le istruzioni che gli agenti ricevono davvero, e sono abbastanza brevi da leggerli prima di fidarti.
+La [Sustainable Use License](LICENSE) versione 1.0, la stessa licenza di omo, con i componenti di terze parti sotto le rispettive licenze. Copre l'uso interno della tua organizzazione e l'uso non commerciale o personale; l'uso commerciale richiede una licenza dal proprietario. I commit precedenti a `ba96abf` sono usciti con licenza MIT.

@@ -12,7 +12,6 @@ import {
   scanMonitors,
   takeMonitor,
 } from "../src/monitor-guard.ts";
-import { monitorStatus } from "../src/monitor-guard-status.ts";
 import { watchWinProcess } from "../src/monitor-guard-win.ts";
 import type { WinProc } from "../src/win-process.ts";
 import { withState } from "./fakes.ts";
@@ -206,23 +205,6 @@ test("takeMonitor without a readable process table runs unguarded and says so", 
     const h = harness(s.dir, [], 104, {});
     expect(await takeMonitor(h.deps)).toBeUndefined();
     expect(h.lines).toEqual(["MONITOR_WARN watch process table unreadable; running without the singleton"]);
-  } finally {
-    s.done();
-  }
-});
-
-test("monitorStatus warns MONITOR_DUPLICATE only for this home's kinds that run more than once", () => {
-  const s = withState();
-  try {
-    const table = [...armed(100), ...armed(200), ...armed(300), ...armed(400, "dead-panes", " --loop 3")];
-    const envs: Record<number, Env> = { 104: HOME_A, 204: HOME_A, 304: HOME_B, 404: HOME_A };
-    const r = monitorStatus(table, (pid) => envs[pid], HOME_A, s.dir);
-    expect(r.duplicates).toBe(1);
-    expect(r.lines.filter((l) => l.startsWith("MONITOR_DUPLICATE"))).toEqual([
-      "MONITOR_DUPLICATE watch 2 instances for this home: 104, 204",
-    ]);
-    expect(r.lines).toContain("MONITOR freshness none");
-    expect(monitorStatus(table, (pid) => envs[pid], HOME_B, s.dir).duplicates).toBe(0);
   } finally {
     s.done();
   }

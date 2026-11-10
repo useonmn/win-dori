@@ -10,15 +10,11 @@ import { acquireSlot, pidAlive, releaseSlot } from "./heavy-slot.ts";
 import { guardTick, sampleHost } from "./host-guard.ts";
 import { fetchHttp } from "./messenger/http.ts";
 import { Slack } from "./messenger/slack.ts";
-import { listProcesses } from "./monitor-guard-win.ts";
-import { monitorStatus } from "./monitor-guard-status.ts";
-import { IS_WINDOWS } from "./paths.ts";
 import { Reports } from "./reports.ts";
 import { canLaunch } from "./routing.ts";
 import { realClock, resolveCommand, run } from "./run.ts";
 import { syncRegistry } from "./sync.ts";
 import { formatVerifyPr, verifyPr } from "./verify-pr.ts";
-import { readProcessEnv } from "./win-process.ts";
 import { Worklog } from "./worklog.ts";
 
 const sync: Command = async ({ values, deps }) => {
@@ -105,14 +101,6 @@ export const opsCommands: Readonly<Record<string, Command>> = {
         console.log(line);
       await Bun.sleep(30_000);
     }
-  },
-  status: async ({ config }) => {
-    if (!IS_WINDOWS) {
-      console.log("MONITOR status needs the Windows process table; use ps on this host");
-      return;
-    }
-    const r = monitorStatus(await listProcesses(run)(), readProcessEnv, process.env, config.stateDir);
-    for (const line of r.lines) console.log(line);
   },
   freshness: async ({ loopMinutes, deps }) => {
     await every(loopMinutes(), async () => {

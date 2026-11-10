@@ -9,7 +9,7 @@ import { LANE_KEY, type Lane, RESERVED_LANE_KEY, sessionFields, upgradeLane } fr
 import { iso, runtimesOf } from "./run.ts";
 import { readScreen, statusLookup } from "./sessions.ts";
 import { paneCommand, resolvePaneShell } from "./pane-shell.ts";
-import { laneEnv, scrubLocalPaths } from "./paths.ts";
+import { scrubLocalPaths } from "./paths.ts";
 import { Reports } from "./reports.ts";
 import { doneSyntaxErrors } from "./signals.ts";
 import type { BudgetLimits } from "./supervision-observe.ts";
@@ -132,7 +132,7 @@ const startLane = async (
   const group = deps.config.laneWorkspace || undefined;
   let ref: SessionRef;
   try {
-    const spec = { name: input.key, role: "lane", container: "tab", cwd, env: laneEnv(deps.env) } as const;
+    const spec = { name: input.key, role: "lane", container: "tab", cwd, env: {} } as const;
     ref = await rts.default.create(group === undefined ? spec : { ...spec, group });
   } catch (e) {
     throw new LaunchError(`session create failed: ${e instanceof Error ? e.message : String(e)}`);

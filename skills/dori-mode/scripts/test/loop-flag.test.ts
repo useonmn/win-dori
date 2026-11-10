@@ -11,7 +11,7 @@ test("watch commands refuse a --loop that is not a number of minutes instead of 
   try {
     const config = join(state.dir, "config.json");
     writeFileSync(config, JSON.stringify({ stateDir: state.dir, defaultCwd: state.dir, hooks: {} }));
-    const invoke = (...args: string[]) =>
+    const invoke = (args: string[], timeoutMs = 10_000) =>
       runWithEnv(
         {
           DORI_CONFIG: config,
@@ -21,7 +21,7 @@ test("watch commands refuse a --loop that is not a number of minutes instead of 
           DORI_SLACK_TOKEN: "xoxb-not-a-real-token",
         },
         [process.execPath, cli, ...args],
-        { timeoutMs: 10_000 },
+        { timeoutMs },
       );
     const refused = [
       ["guard", "--loop", "5m"],
@@ -35,7 +35,7 @@ test("watch commands refuse a --loop that is not a number of minutes instead of 
       ["inbound", "slack", "--loop", "abc"],
     ];
     for (const args of refused) {
-      const r = await invoke(...args);
+      const r = await invoke(args);
       expect({ args, code: r.code, err: r.err, out: r.out }).toEqual({
         args,
         code: 1,
@@ -43,8 +43,9 @@ test("watch commands refuse a --loop that is not a number of minutes instead of 
         out: "",
       });
     }
+    // A guard that runs samples the host; on Windows that is one powershell.exe CIM call, slow on a busy machine.
     for (const args of [["guard", "--loop", "0"], ["guard"]]) {
-      const r = await invoke(...args);
+      const r = await invoke(args, 45_000);
       expect(r.code).toBe(0);
       expect(r.out).toStartWith("HOST_GUARD_READY");
     }

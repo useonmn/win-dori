@@ -45,17 +45,6 @@ export const envInt = (name: string, raw: string | undefined): number => {
   return n;
 };
 
-/**
- * The variable holding the owner's Telegram user id. windori's setup (dori setup telegram, install-profile.ps1) writes
- * DORI_TELEGRAM_OWNER to telegram.env; DORI_TELEGRAM_OWNER_ID is read first and named when neither is set.
- */
-export const telegramOwnerVar = (
-  env: Readonly<Record<string, string | undefined>>,
-): "DORI_TELEGRAM_OWNER_ID" | "DORI_TELEGRAM_OWNER" =>
-  env["DORI_TELEGRAM_OWNER_ID"] === undefined && env["DORI_TELEGRAM_OWNER"] !== undefined
-    ? "DORI_TELEGRAM_OWNER"
-    : "DORI_TELEGRAM_OWNER_ID";
-
 export type TgInboundStore = { load(): number; save(offset: number): void };
 
 /**

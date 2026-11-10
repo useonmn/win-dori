@@ -67,7 +67,6 @@ function setup() {
       env: {
         ...gitEnv,
         HOME: home,
-        DORI_HOME: join(home, ".dori"),
         DORI_SRC: src,
         SKILLS_DIR: join(home, "skills"),
         [PATH_KEY]: `${bin}${delimiter}${process.env["PATH"] ?? process.env["Path"]}`,
