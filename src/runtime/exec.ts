@@ -10,9 +10,11 @@ export type ExecResult = {
   readonly stderr: string;
   readonly refused?: true;
 };
-export type Exec = (cmd: string, argv: readonly string[]) => Promise<ExecResult>;
+/** `onSpawn` gets the running process, so a caller that gives up on it can kill it. */
+export type ExecOptions = { readonly onSpawn?: (proc: { kill(): void }) => void };
+export type Exec = (cmd: string, argv: readonly string[], options?: ExecOptions) => Promise<ExecResult>;
 
-export const spawnExec: Exec = async (cmd, argv) => {
+export const spawnExec: Exec = async (cmd, argv, options) => {
   // On Windows an npm .cmd shim is run through node or a safely quoted cmd.exe line (see run.ts), or refused.
   const resolved = resolveCommand([cmd, ...argv]);
   if ("refused" in resolved) return { code: 126, stdout: "", stderr: resolved.refused, refused: true };
@@ -22,6 +24,7 @@ export const spawnExec: Exec = async (cmd, argv) => {
     stdin: "ignore",
     ...(resolved.verbatim ? { windowsVerbatimArguments: true } : {}),
   });
+  options?.onSpawn?.(proc);
   const [stdout, stderr, code] = await Promise.all([
     new Response(proc.stdout).text(),
     new Response(proc.stderr).text(),

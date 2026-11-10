@@ -1,6 +1,8 @@
 import { expect, test } from "bun:test";
 
-import { lastLines, paneCommand, quoteForPane, resolvePaneShell, shellFromProcess } from "../src/launch.ts";
+import { lastLines } from "../src/launch.ts";
+import { quoteForPane } from "../src/launch-footer.ts";
+import { paneCommand, resolvePaneShell, shellFromProcess } from "../src/pane-shell.ts";
 
 const tricky = ["bun", "-e", "x", "--", 'it\'s "quoted"; & | % ^ $x', "C:\\Program Files\\a b", "\u00fc \ud55c\uae00"];
 

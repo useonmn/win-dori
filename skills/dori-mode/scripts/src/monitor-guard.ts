@@ -1,11 +1,9 @@
-import { dlopen, FFIType, ptr } from "bun:ffi";
 import { mkdirSync, readFileSync, unlinkSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
 
 import { baseName, pathKey } from "./paths.ts";
-import type { Runner } from "./run.ts";
-import { parseWin32Processes, parseWindowsCommandLine, WIN_PROC_SCRIPT, type WinProc } from "./win-process.ts";
+import { parseWindowsCommandLine, type WinProc } from "./win-process.ts";
 
 /**
  * Long-running monitors on Windows. A monitor is started as `dori.exe <kind>` from a shell an agent session armed,
@@ -227,83 +225,4 @@ export const takeMonitor = async (d: GuardDeps): Promise<Guard | undefined> => {
       }
     },
   };
-};
-
-export type DuplicateReport = { readonly lines: readonly string[]; readonly duplicates: number };
-
-/** `dori status`: this home's monitor instances, and a MONITOR_DUPLICATE warning per kind running more than once. */
-export const monitorStatus = (
-  table: readonly WinProc[],
-  readEnv: (pid: number) => Env | undefined,
-  env: Env,
-  stateDir: string,
-): DuplicateReport => {
-  const home = homeKey(env);
-  const mine = scanMonitors(table, readEnv).filter((i) => i.home === home);
-  const lines: string[] = [];
-  let duplicates = 0;
-  for (const kind of MONITOR_KINDS) {
-    const of = mine.filter((i) => i.kind === kind);
-    const lock = readLock(lockPath(stateDir, kind));
-    const holder = lock && isLive(table, lock) ? ` lock=${lock.pid}` : "";
-    for (const i of of)
-      lines.push(
-        `MONITOR ${kind} pid=${i.pid} parent=${i.parent?.pid ?? "gone"}${i.startedAt ? ` started=${new Date(i.startedAt).toISOString()}` : ""}${holder}`,
-      );
-    if (!of.length) lines.push(`MONITOR ${kind} none`);
-    if (of.length > 1) {
-      duplicates++;
-      lines.push(`MONITOR_DUPLICATE ${kind} ${of.length} instances for this home: ${of.map((i) => i.pid).join(", ")}`);
-    }
-  }
-  return { lines, duplicates };
-};
-
-export const listProcesses = (run: Runner) => async (): Promise<WinProc[]> => {
-  const r = await run(["powershell", "-NoProfile", "-NonInteractive", "-Command", WIN_PROC_SCRIPT], {
-    timeoutMs: 30_000,
-  });
-  return r.code === 0 ? parseWin32Processes(r.out) : [];
-};
-
-export const killTree =
-  (run: Runner) =>
-  async (pid: number): Promise<void> => {
-    await run(["taskkill", "/T", "/F", "/PID", String(pid)], { timeoutMs: 30_000 });
-  };
-
-const SYNCHRONIZE = 0x0010_0000;
-const PROCESS_QUERY_LIMITED_INFORMATION = 0x1000;
-const WAIT_OBJECT_0 = 0;
-const FILETIME_EPOCH_MS = 11_644_473_600_000;
-
-let k32: ReturnType<typeof loadK32> | undefined;
-const loadK32 = () =>
-  dlopen("kernel32.dll", {
-    OpenProcess: { args: [FFIType.u32, FFIType.i32, FFIType.u32], returns: FFIType.ptr },
-    WaitForSingleObject: { args: [FFIType.ptr, FFIType.u32], returns: FFIType.u32 },
-    GetProcessTimes: { args: [FFIType.ptr, FFIType.ptr, FFIType.ptr, FFIType.ptr, FFIType.ptr], returns: FFIType.i32 },
-    CloseHandle: { args: [FFIType.ptr], returns: FFIType.i32 },
-  }).symbols;
-
-/**
- * Holds a handle to `r` (so its pid cannot be reused under us) and reports whether it has exited. A process that is
- * already gone, or whose start time differs from `r.startedAt` by more than a millisecond (a reused pid), reads as gone.
- */
-export const watchWinProcess = (r: ProcRef): (() => boolean) => {
-  k32 ??= loadK32();
-  const api = k32;
-  const h = api.OpenProcess(SYNCHRONIZE | PROCESS_QUERY_LIMITED_INFORMATION, 0, r.pid);
-  if (!h) return () => true;
-  if (r.startedAt !== undefined) {
-    const times = new BigUint64Array(4);
-    if (api.GetProcessTimes(h, ptr(times, 0), ptr(times, 8), ptr(times, 16), ptr(times, 24))) {
-      const created = Number((times[0] ?? 0n) / 10_000n) - FILETIME_EPOCH_MS;
-      if (Math.abs(created - r.startedAt) > 1) {
-        api.CloseHandle(h);
-        return () => true;
-      }
-    }
-  }
-  return () => api.WaitForSingleObject(h, 0) === WAIT_OBJECT_0;
 };
