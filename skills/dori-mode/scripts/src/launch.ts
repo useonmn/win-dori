@@ -133,7 +133,10 @@ const startLane = async (
   let ref: SessionRef;
   try {
     // The lane reports into this home: the skill resolves only these two, never DORI_HOME (#197).
-    const env = { DORI_CONFIG: configPath(), DORI_STATE_DIR: deps.config.stateDir };
+    const env: Record<string, string> = { DORI_CONFIG: configPath(), DORI_STATE_DIR: deps.config.stateDir };
+    // The core's env is not the launcher's: pass this home's Slack token so the lane posts as this home's bot.
+    const token = process.env["DORI_SLACK_TOKEN"];
+    if (token) env["DORI_SLACK_TOKEN"] = token;
     const spec = { name: input.key, role: "lane", container: "tab", cwd, env } as const;
     ref = await rts.default.create(group === undefined ? spec : { ...spec, group });
   } catch (e) {
