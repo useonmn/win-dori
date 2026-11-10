@@ -30,7 +30,7 @@ A session is stored as a `SessionRef`: the runtime, the id (`w1:p3` on herdr, `t
 New sessions open on one runtime, picked in this order (`readRuntimeChoice` in `src/runtime/select.ts`):
 
 1. `DORI_RUNTIME=herdr` or `DORI_RUNTIME=hc`.
-2. `"runtime": "herdr"` or `"runtime": "hc"` in `$DORI_HOME/config.json` (default `~/.dori/config.json`). This is the same file the dori-mode skill reads, so one line sets both.
+2. `"runtime": "herdr"` or `"runtime": "hc"` in `$DORI_HOME/config.json` (default `~/.dori/config.json`). The dori-mode skill reads `DORI_CONFIG` (default `~/.dori/config.json`) and never `DORI_HOME`, so it is the same file, and one line sets both, only while `DORI_HOME` is unset or `DORI_CONFIG` names that file.
 3. `HC_TERMINAL_ID` is set: Dori runs inside an hc terminal, so hc.
 4. `HERDR_PANE_ID` is set: Dori runs inside a herdr pane, so herdr.
 5. The binaries on PATH: hc (herdr-core) when it is installed, else herdr. hc is the default runtime; with both installed, herdr is one config line away.

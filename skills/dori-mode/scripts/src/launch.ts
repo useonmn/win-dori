@@ -1,6 +1,6 @@
 import { homedir } from "node:os";
 
-import { fill } from "./config.ts";
+import { configPath, fill } from "./config.ts";
 import type { FlowDeps } from "./done-flow.ts";
 import { laneGoalActive } from "./goal-record.ts";
 import { BRIEF_START, footer, originalBrief } from "./launch-footer.ts";
@@ -132,7 +132,9 @@ const startLane = async (
   const group = deps.config.laneWorkspace || undefined;
   let ref: SessionRef;
   try {
-    const spec = { name: input.key, role: "lane", container: "tab", cwd, env: {} } as const;
+    // The lane reports into this home: the skill resolves only these two, never DORI_HOME (#197).
+    const env = { DORI_CONFIG: configPath(), DORI_STATE_DIR: deps.config.stateDir };
+    const spec = { name: input.key, role: "lane", container: "tab", cwd, env } as const;
     ref = await rts.default.create(group === undefined ? spec : { ...spec, group });
   } catch (e) {
     throw new LaunchError(`session create failed: ${e instanceof Error ? e.message : String(e)}`);

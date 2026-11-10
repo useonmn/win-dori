@@ -86,3 +86,22 @@ test("a narrow pane that cuts the goal footer short reads STARTUP_OK when the la
   // Another lane's active goal in the same cwd is not this lane's goal.
   expect(await launch("narrow")).toStartWith("STARTUP_NO_GOAL narrow w:p9");
 });
+
+test("launch opens the lane with DORI_CONFIG and DORI_STATE_DIR of this home, so its reports land here (#197)", async () => {
+  const home = join(state.dir, "second-home");
+  const brief = join(state.dir, "brief.md");
+  writeFileSync(brief, "# brief\n");
+  const before = process.env["DORI_CONFIG"];
+  process.env["DORI_CONFIG"] = join(home, "config.json");
+  try {
+    const deps = depsFor(world, fakeClock(T0), join(home, "state"), { runtime: "hc" });
+    await launchLane(deps, { key: "env-lane", title: "t", brief, done: "closed acme/app#3" });
+  } finally {
+    if (before === undefined) delete process.env["DORI_CONFIG"];
+    else process.env["DORI_CONFIG"] = before;
+  }
+  const create = world.calls.find((c) => c[0] === "hc" && c[2] === "run") ?? [];
+  const env = create.slice(create.indexOf("env") + 1);
+  expect(env).toContain(`DORI_CONFIG=${join(home, "config.json")}`);
+  expect(env).toContain(`DORI_STATE_DIR=${join(home, "state")}`);
+});
