@@ -102,14 +102,7 @@ export class Supervision {
   }
 
   private activity(lane: SupervisedLane): Promise<string> {
-    return laneActivity(
-      this.deps.run,
-      this.options,
-      this.reports,
-      this.checkpoints,
-      lane,
-      this.deps.windows ?? IS_WINDOWS,
-    );
+    return laneActivity(this.deps.run, this.options, this.reports, this.checkpoints, lane, this.deps.windows);
   }
 
   async sweep(lane: SupervisedLane, screen: string): Promise<SupervisionResult> {
