@@ -66,6 +66,8 @@ Every module takes its HTTP, clock and timers as arguments. That is how the test
 ### `dori launch <key> --title T --brief FILE --done "..." [--thread REF] [--model M] [--cwd DIR] [--dry-run]`
 Opens a lane: puts the current lessons (below), global and the repo's, above the brief, appends the footer, opens a tab, starts the agent, and after 20 seconds checks it: `STARTUP_ERROR` on a known failure in the pane (at that check, or on an idle agent with no goal during the goal wait), `STARTUP_OK` only when the runtime reports the agent idle or working and it has a goal (unless `goalMarker` is empty): omo's goal record for the session this launch started (`sessionsDir`, matched by the launch prompt naming the lane) is active, which holds at any pane width, or `goalMarker` shows in the pane's footer, its last three non-empty lines, so agent output above it does not count, `STARTUP_NO_GOAL` when the agent runs but shows no goal for another 60 seconds, and `STARTUP_UNCONFIRMED` (with the last lines) otherwise. Exit 3 on anything but `STARTUP_OK`.
 
+The lane never gets the Slack token itself: on hc every env value is a command-line argument, which `ps`, `hc get` and logs show. When the launcher has `DORI_SLACK_TOKEN_FILE`, or a `slack-token` file sits next to its config, the lane gets that path as `DORI_SLACK_TOKEN_FILE` and an empty `DORI_SLACK_TOKEN`, so a token inherited from another home's core cannot win. With neither, the lane env is unchanged.
+
 `--dry-run` prints the brief as the lane would get it, lessons and footer included, and changes nothing.
 
 ### `dori adopt <key> --pane ID --title T --brief FILE --done "..." [--thread REF]`
@@ -155,7 +157,7 @@ Prints `HOST_GUARD ALERT <reasons>` when load, free memory, free disk or the pan
 Prints `CAN_LAUNCH` and exits 0 when the host has room for another lane. Otherwise it prints `HOLD <reasons>` and exits 4. The reasons come from the guard's memory, disk and pane-count thresholds. CPU load alone never holds a launch, because it moves too fast to plan around.
 
 ### `dori send <slack|telegram|discord> --to TARGET --text TEXT [--thread ID] [--edit ID]`
-Posts a message, or edits one with `--edit`. Tokens come from `DORI_SLACK_TOKEN` (plus `DORI_SLACK_COOKIE` for a user token), `DORI_TELEGRAM_TOKEN` or `DORI_DISCORD_TOKEN`. Text containing `$(` is refused, since it can only come from a shell string. Rate limits are retried with the server's wait time; other errors fail at once.
+Posts a message, or edits one with `--edit`. Tokens come from `DORI_SLACK_TOKEN`, or when that is unset or empty from the file `DORI_SLACK_TOKEN_FILE` names (plus `DORI_SLACK_COOKIE` for a user token). The file must be owner-only (`chmod 600`); a file open to group or others, missing or empty is refused. Windows has no mode bits to check, so there the file's ACL is the owner's to set. Other tokens come from `DORI_TELEGRAM_TOKEN` or `DORI_DISCORD_TOKEN`. Text containing `$(` is refused, since it can only come from a shell string. Rate limits are retried with the server's wait time; other errors fail at once.
 
 ### `dori presence <slack|discord>`
 Keeps the account shown as online until stopped.
