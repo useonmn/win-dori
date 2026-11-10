@@ -101,9 +101,11 @@ test("launch opens the lane with DORI_CONFIG and DORI_STATE_DIR of this home, so
     else process.env["DORI_CONFIG"] = before;
   }
   const create = world.calls.find((c) => c[0] === "hc" && c[2] === "run") ?? [];
-  const env = create.slice(create.indexOf("env") + 1);
-  expect(env).toContain(`DORI_CONFIG=${join(home, "config.json")}`);
-  expect(env).toContain(`DORI_STATE_DIR=${join(home, "state")}`);
+  // POSIX: `env K=V ... sh`; Windows (win-dori): one pwsh -Command string with `$env:K = 'V'`.
+  const cmd = create.join(" ");
+  const hasEnv = (k: string, v: string) => cmd.includes(`${k}=${v}`) || cmd.includes(`$env:${k} = '${v}'`);
+  expect(hasEnv("DORI_CONFIG", join(home, "config.json"))).toBe(true);
+  expect(hasEnv("DORI_STATE_DIR", join(home, "state"))).toBe(true);
 });
 
 test("launch passes the launcher's DORI_SLACK_TOKEN to the lane, so it posts as this home's bot", async () => {
