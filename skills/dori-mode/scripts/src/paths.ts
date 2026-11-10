@@ -42,12 +42,3 @@ export const scrubLocalPaths = (text: string, home = ""): string => {
   }
   return out.replace(POSIX_LOCAL, "(local path)").replace(WINDOWS_LOCAL, "(local path)");
 };
-
-/**
- * The Dori's own folder, as its lead's env names it. A second Dori on the PC runs with these set; a lane is started by
- * the runtime (hc's core, herdr's server), not by the lead's shell, so it inherits none of them and would report into
- * the first Dori's state: they are passed to the lane's session explicitly, when set.
- */
-const LANE_ENV_KEYS = ["DORI_HOME", "DORI_CONFIG", "DORI_STATE_DIR", "DORI_ENV_FILE"] as const;
-export const laneEnv = (env: Readonly<Record<string, string | undefined>> = process.env): Record<string, string> =>
-  Object.fromEntries(LANE_ENV_KEYS.flatMap((k) => (env[k] ? [[k, env[k]]] : [])));

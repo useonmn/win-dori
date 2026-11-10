@@ -66,16 +66,6 @@ export type SessionDeps = {
   readonly windows?: boolean;
   /** Windows only: a process's environment, or undefined when it cannot be read. */
   readonly readEnv?: (pid: number) => Readonly<Record<string, string>> | undefined;
-  readonly selfPid?: number;
-};
-
-// dori itself and the shell that ran it usually sit inside the lead's agent tree and carry the env of whichever
-// (sub)session invoked them, so they never count as the pane's own session.
-const selfAndAncestors = (table: readonly Proc[], pid: number): Set<number> => {
-  const parent = new Map(table.map((p) => [p.pid, p.ppid]));
-  const out = new Set<number>();
-  for (let p: number | undefined = pid; p !== undefined && p > 0 && !out.has(p); p = parent.get(p)) out.add(p);
-  return out;
 };
 
 const childSessionId = async (pid: number, deps: SessionDeps, windows: boolean): Promise<string> => {
@@ -116,10 +106,7 @@ export const resolveSession = async (
   const flagAt = argv.indexOf("--session");
   const fromFlag = flagAt >= 0 ? (argv[flagAt + 1] ?? "") : "";
   if (fromFlag) return { id: fromFlag, via: "argv", pid: agent.pid };
-  const self = selfAndAncestors(table, deps.selfPid ?? process.pid);
-  for (const child of descendants(table, agent.pid)
-    .filter((p) => !self.has(p.pid))
-    .slice(0, 40)) {
+  for (const child of descendants(table, agent.pid).slice(0, 40)) {
     const id = await childSessionId(child.pid, deps, windows);
     if (id) return { id, via: "child-env", pid: agent.pid };
   }

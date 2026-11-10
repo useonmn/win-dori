@@ -11,7 +11,7 @@
 [![CI](https://github.com/useonmn/win-dori/actions/workflows/ci.yml/badge.svg)](https://github.com/useonmn/win-dori/actions/workflows/ci.yml)
 [![License: SUL-1.0](https://img.shields.io/badge/license-SUL--1.0-blue.svg)](LICENSE)
 
-> **win-dori 是 [sisyphuslabs/dori-superagent](https://github.com/sisyphuslabs/dori-superagent) 的 Windows 移植版。** Dori 和 dori-superagent 是 Sisyphus Labs 的项目；win-dori 跟随上游提交 [97d807b](https://github.com/sisyphuslabs/dori-superagent/commit/97d807b9037cb050a72129659cf6306d8055010d)，保留上游的行为和默认值。它只加 Windows 需要的东西：PowerShell 安装、按 shell 处理的 pane，以及带开机自启和 Slack 监听器的 Windows 配置。Dori 的功劳归上游作者；Windows 部分的 bug 算我们的。上游问题请提到 [sisyphuslabs/dori-superagent/issues](https://github.com/sisyphuslabs/dori-superagent/issues)。
+> **win-dori 是 [sisyphuslabs/dori-superagent](https://github.com/sisyphuslabs/dori-superagent) 的 Windows 移植版。** Dori 和 dori-superagent 是 Sisyphus Labs 的项目；win-dori 跟随上游提交 [97d807b](https://github.com/sisyphuslabs/dori-superagent/commit/97d807b9037cb050a72129659cf6306d8055010d)，保留上游的行为和默认值。它只加 Windows 需要的东西：PowerShell 安装、按 shell 处理的 pane，以及带开机自启的 Windows 配置。Dori 的功劳归上游作者；Windows 部分的 bug 算我们的。上游问题请提到 [sisyphuslabs/dori-superagent/issues](https://github.com/sisyphuslabs/dori-superagent/issues)。
 
 > **许可证。** 从这次移植起，win-dori 和上游一样采用 [Sustainable Use License](LICENSE)：只允许个人使用、企业内部使用和免费的非商业使用。win-dori 改了什么见 [NOTICE.md](NOTICE.md)。`fa86ddf` 及之前的版本是 MIT，继续是 MIT。
 
@@ -55,38 +55,24 @@ Slack、Discord 和 Telegram 都在 `skills/dori-mode/scripts/src/messenger/` �
 
 ## 快速开始
 
-这里有两个程序。win-dori 里 harness 叫 `dori-harness`（上游叫 `dori`），Dori mode 的消息 CLI 叫 `dori`，所以两者可以装在同一台机器上。上游文字里写 `dori up` 或 `dori merge` 的地方，win-dori 用 `dori-harness up` 和 `dori-harness merge`。
+两种安装方式都会在你的 PATH 上放一个名为 `dori` 的命令，所以每台机器只装一种。如果一台机器上两者都有，就用 `bun src/cli.ts` 运行 harness，把 `dori` 留给 Dori mode；无论哪种情况，harness 自己的提示词都用完整路径调用它。
 
 ### Windows
 
-在 PowerShell 里，任意目录下：
+在 PowerShell 里：
 
 ```powershell
 irm https://raw.githubusercontent.com/useonmn/win-dori/main/install.ps1 | iex
 ```
 
-有检出副本的话，也可以在 cmd.exe 里运行 `install.cmd`，它用同样的参数调用 `install.ps1`。
-
-整个安装就这一行。它需要 git（没有而有 winget 时会装 `Git.Git`），缺 bun 和 herdr 时用官方安装程序安装（`DORI_NO_DEPS=1` 关掉）。安装到 `%USERPROFILE%\.dori\src`，再次运行会更新这份副本（`DORI_NO_PULL=1` 跳过 pull）。技能以目录联接链接到 `%USERPROFILE%\.agents\skills\dori-mode`，所以不需要管理员权限或开发者模式。它运行 `bun install` 和 `bun link`，并把 bun 的全局 bin 目录加入用户 PATH。然后放置 `profile/` 里的 Windows 配置。`DORI_SKIP_PROFILE=1` 跳过这一步，改为把示例配置复制到 `%USERPROFILE%\.dori\config.json`。`DORI_SRC`、`SKILLS_DIR`、`DORI_HOME` 改变这些位置，`DORI_REPO` 指向一个 fork。装完后打开新终端，让 PATH 生效。
-
-然后打开 herdr，在里面启动 omo，说 "Dori mode"。
-
-### Windows 配置
-
-无论你选哪个消息平台，这套配置都让 Dori 在重启后继续运行：启动脚本、配置、自启任务，选 Slack 时还有带频道规则和应用清单的 Socket Mode 入站监听器。里面不写任何用户、目录或频道；路径都来自 `%USERPROFILE%`，id 都来自你自己的令牌。
-
-第一次说 "Dori mode" 时，Dori 会在对话里自己完成设置。它问你用哪个消息平台，打开一个只有你能读的记事本文件来接收令牌（不要把令牌贴到聊天里），然后 `dori setup <messenger>` 校验令牌、补全能查到的 id，保存只有你的 Windows 用户能读的 `%USERPROFILE%\.dori\<messenger>.env`（`slack.env`、`telegram.env` 或 `discord.env`），并注册 `Dori Autostart` 任务。此后每次登录都会启动 herdr，打开以你的 Dori 命名的工作区，并在那里启动代理。
-
-Slack 监听器给接到的每条消息加一个眼睛表情，在线程里显示处理中状态，Dori 回复后把眼睛换成对勾。
-
-重复运行配置步骤是安全的。你改过的文件会保留并显示差异；`config.json` 只创建，不替换。`DORI_DRY_RUN=1` 预览，`DORI_FORCE=1` 替换改过的文件并留下 `.bak-<time>` 副本，`DORI_NO_TASK=1` 不注册任务；每次运行都会写出能撤销它的 `%USERPROFILE%\.dori\undo-profile-<time>.ps1`。所有组成部分列在 [profile/INVENTORY.md](profile/INVENTORY.md)，在检出目录里运行 `profile\install-profile.ps1 -DryRun` 只跑配置步骤。
+在 [useonmn/win-dori](https://github.com/useonmn/win-dori) 的 checkout 里则运行 `.\install.ps1`。缺 git 时它用 winget 安装 git，bun 和 herdr（选的运行时是 hc 时则是 hc）用各自的官方安装程序安装。它把 win-dori 克隆到 `%USERPROFILE%\.dori\src`，把 skill 以目录联接链接到 `%USERPROFILE%\.agents\skills\dori-mode`，并把 `dori` 放进用户 PATH。然后放置 Windows 配置：一个启动脚本，以及一个在你登录时启动 Dori 的任务计划程序任务。消息工具的 token 和上表一样用环境变量设置。
 
 ### Dori mode，你对话的那个 bot
 
 你需要 herdr、Bun 1.4.4 或更新版本、git，以及 GitHub CLI `gh`。
 
 ```sh
-curl -fsSL https://raw.githubusercontent.com/useonmn/win-dori/main/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/sisyphuslabs/dori-superagent/main/install.sh | bash
 ```
 
 这会把本仓库克隆到 `~/.dori/src`，把 skill 链接到 `~/.agents/skills/dori-mode`，把 `dori` 链接到你的 PATH 上，并把一份示例配置复制到 `~/.dori/config.json`。至少要修改 `leadPane`（你自己的 herdr pane，用 `herdr pane current` 查看）、`laneWorkspace` 和 `defaultCwd`。
@@ -100,52 +86,45 @@ curl -fsSL https://raw.githubusercontent.com/useonmn/win-dori/main/install.sh | 
 你需要 Bun 1.4.4 或更新版本、herdr、omo，以及 `gh`（用于 PR head SHA、检查和 merge）。
 
 ```sh
-git clone https://github.com/useonmn/win-dori
-cd win-dori
+git clone https://github.com/sisyphuslabs/dori-superagent
+cd dori-superagent
 bun install
-bun link   # puts `dori-harness` on your PATH
+bun link   # puts `dori` on your PATH
 ```
 
 启动 herdr，然后：
 
 ```sh
-dori-harness up
+dori up
 # UP runtime=herdr lead=w1:p1 duty=w1:p2 loop=w1:p3 hourly=w1:p4 home=~/.dori
 ```
 
 这会打开一个名为 `dori` 的 herdr 工作区，里面有一个 lead pane（omo，系统提示词后追加了 `prompts/lead.md`），一个 duty pane（omo，带 `prompts/duty.md`），其下是 duty loop，再下面是 hourly loop。和 lead pane 对话就行。它会写一份 brief（目标、输入、交付物、停止条件、约束；见 [`examples/brief.md`](examples/brief.md)），并自己开 lane。你也可以在 shell 里做同样的事：
 
 ```sh
-dori-harness start fix-flaky-login --brief examples/brief.md
+dori start fix-flaky-login --brief examples/brief.md
 # STARTED fix-flaky-login pane=w1:p5 brief=~/.dori/briefs/fix-flaky-login.md
-dori-harness status
+dori status
 ```
 
 在 lane 内部，omo 用 lane 规则交给它的命令汇报和收尾：
 
 ```sh
-dori-harness report fix-flaky-login --text 'reproduced: 1 failure in 20 runs, shared session fixture'
-dori-harness report fix-flaky-login --status waiting --text 'WAITING: checks on owner/repo#12'
-dori-harness ready fix-flaky-login --text 'root cause fixed in owner/repo#12, checks green' --evidence https://github.com/owner/repo/pull/12
+dori report fix-flaky-login --text 'reproduced: 1 failure in 20 runs, shared session fixture'
+dori report fix-flaky-login --status waiting --text 'WAITING: checks on owner/repo#12'
+dori ready fix-flaky-login --text 'root cause fixed in owner/repo#12, checks green' --evidence https://github.com/owner/repo/pull/12
 ```
 
 lead 收到 `[READY fix-flaky-login]` 时：
 
 ```sh
-dori-harness review owner/repo#12            # fresh omo reviewer pinned to the head SHA; writes a receipt; exit 0 on CLEAR
-dori-harness merge owner/repo#12 --dry-run   # MERGE_OK ... (dry run), or MERGE_REFUSED <why> with exit 2
-dori-harness merge owner/repo#12             # gh pr merge --squash --match-head-commit <sha>
-dori-harness done fix-flaky-login            # closes the lane's pane; only a READY lane can be closed
+dori review owner/repo#12            # fresh omo reviewer pinned to the head SHA; writes a receipt; exit 0 on CLEAR
+dori merge owner/repo#12 --dry-run   # MERGE_OK ... (dry run), or MERGE_REFUSED <why> with exit 2
+dori merge owner/repo#12             # gh pr merge --squash --match-head-commit <sha>
+dori done fix-flaky-login            # closes the lane's pane; only a READY lane can be closed
 ```
 
 不带参数运行 `bun src/cli.ts` 会打印每条命令和它的参数。
-
-### Windows 说明
-
-- 令牌放在 `~/.dori/<messenger>.env`，不放进用户环境变量。`dori` 自己读取这个文件（或 `DORI_ENV_FILE` 指定的文件）。临时 shell 里可以用 `$env:DORI_SLACK_TOKEN = "xoxp-..."` 设置。
-- harness 会往 pane 里输入命令，所以它探测每个 pane 的 shell 并按它加引号：pwsh、Windows PowerShell 5.1、cmd 或 Git Bash。`DORI_PANE_SHELL`（`posix`、`pwsh`、`powershell` 或 `cmd`）可以覆盖探测结果。
-- 主机守卫通过一次 `powershell.exe` 调用读取负载、内存、交换区和磁盘。负载是 CPU 使用率乘以 CPU 数再加处理器队列，所以比 Unix 的 1 分钟平均值波动更大。
-- `Done =` 命令写成 argv 列表，比如 `["bun","test"]`，同一行在 Windows、macOS 和 Linux 上都能用。
 
 ## harness 如何工作
 
@@ -153,18 +132,18 @@ dori-harness done fix-flaky-login            # closes the lane's pane; only a RE
 
 三个角色，每个都是 herdr pane 里的一个 omo 会话。herdr 提供工作区、标签页和 pane，能识别出 pane 里的 omo 是一个 agent，并通过自己的 CLI 报告它的状态（idle、working、blocked、done）。dori 在对一个 pane 做任何操作之前都会先读取这个状态。
 
-lead 是唯一和你说话的会话。它把请求变成 brief，用 `dori-harness start` 开 lane，读取 lane 发回的内容，然后 merge。
+lead 是唯一和你说话的会话。它把请求变成 brief，用 `dori start` 开 lane，读取 lane 发回的内容，然后 merge。
 
-一个 lane 就是一个 omo 会话，在自己的 herdr 标签页里，启动时带一份 brief，后面追加 lane 规则（`prompts/lane-footer.md`）。它用 `dori-harness report` 汇报里程碑，用 `dori-harness ready` 收尾，没有证据链接时 `dori-harness ready` 不会发送。
+一个 lane 就是一个 omo 会话，在自己的 herdr 标签页里，启动时带一份 brief，后面追加 lane 规则（`prompts/lane-footer.md`）。它用 `dori report` 汇报里程碑，用 `dori ready` 收尾，没有证据链接时 `dori ready` 不会发送。
 
-duty loop 是 `dori-harness duty --interval 60`，一个普通进程，所在 pane 紧挨着一个 duty omo 会话。每个 tick 它会把排队的消息投递到已空闲的 pane，提醒沉默的 lane，向 lead 升级，并把 pane 已消失的 lane 标记为 lost。`dori-harness duty stop --text 'why'` 是它的停止开关；在 `dori-harness duty resume` 之前，每个 tick 只打印它为什么停着。
+duty loop 是 `dori duty --interval 60`，一个普通进程，所在 pane 紧挨着一个 duty omo 会话。每个 tick 它会把排队的消息投递到已空闲的 pane，提醒沉默的 lane，向 lead 升级，并把 pane 已消失的 lane 标记为 lost。`dori duty stop --text 'why'` 是它的停止开关；在 `dori duty resume` 之前，每个 tick 只打印它为什么停着。
 
-hourly loop 是 `dori-harness loop`，由 `dori-harness up` 在第四个 pane 里启动。工作在 `~/.dori/backlog/` 下的 backlog 里排队，每个条目一份 brief，由 lead 添加，或从带有某个标签的 GitHub issue 导入：
+hourly loop 是 `dori loop`，由 `dori up` 在第四个 pane 里启动。工作在 `~/.dori/backlog/` 下的 backlog 里排队，每个条目一份 brief，由 lead 添加，或从带有某个标签的 GitHub issue 导入：
 
 ```sh
-dori-harness backlog add search-index --brief briefs/search.md --priority 2
-dori-harness backlog add new-billing --brief briefs/billing.md --decision 'charge per seat or per workspace?'
-dori-harness backlog import owner/repo --label dori     # label p1..p9 sets the priority, needs-decision marks a question
+dori backlog add search-index --brief briefs/search.md --priority 2
+dori backlog add new-billing --brief briefs/billing.md --decision 'charge per seat or per workspace?'
+dori backlog import owner/repo --label dori     # label p1..p9 sets the priority, needs-decision marks a question
 ```
 
 一次运行通过它的 gate（没有被停止，没有被另一个 loop 锁住，距上次运行至少隔了一个间隔）之后，先根据 lane 和 PR 的状态同步条目。接着审查漏掉的工作：沉默了 3 小时的 lane，READY 后 2 小时没人关闭的 lane，消失的 pane。然后在 `--max-lanes`（默认 3）个打开的 lane 和每次运行 `--max-starts`（默认 2）个的限制内，只要宿主机的负载和内存还有余量，就拉取下一批未完成的条目。每个悬而未决的问题以 `[DECIDE <id>]` 的形式只到达 lead 一次，6 小时后提醒一次，每次运行以一条发给 lead 的 `[LOOP ...]` 报告结束。
@@ -173,15 +152,15 @@ loop 只开 lane 和发消息；它从不 merge、push 或关闭 pane。完整�
 
 ![lane 生命周期](docs/lane-flow.png)
 
-`dori-harness start <key> --brief FILE` 把 brief 和 lane 规则写入 `~/.dori/briefs/<key>.md`，打开一个标签页，用一个指明该 brief 的提示词运行 omo，把 lane 记录为 `working`，并给 lead 发送 `[START <key>]`。之后 lane 进行汇报（`[REPORT <key>]`，或者在被自己 pane 以外的事情卡住时发 `[REPORT <key> WAITING]`），最后以 `[READY <key>]` 加上证据链接收尾。一直空闲的 lane 会在 10 分钟和 20 分钟时收到提醒，40 分钟时被升级到 lead。在 READY 之前 pane 就消失的 lane 会被报告为 `[LOST <key>]`。
+`dori start <key> --brief FILE` 把 brief 和 lane 规则写入 `~/.dori/briefs/<key>.md`，打开一个标签页，用一个指明该 brief 的提示词运行 omo，把 lane 记录为 `working`，并给 lead 发送 `[START <key>]`。之后 lane 进行汇报（`[REPORT <key>]`，或者在被自己 pane 以外的事情卡住时发 `[REPORT <key> WAITING]`），最后以 `[READY <key>]` 加上证据链接收尾。一直空闲的 lane 会在 10 分钟和 20 分钟时收到提醒，40 分钟时被升级到 lead。在 READY 之前 pane 就消失的 lane 会被报告为 `[LOST <key>]`。
 
 状态以 JSON 形式存放在 `~/.dori`（或 `$DORI_HOME`）下的磁盘上：`lanes/`、`inbox/`、`briefs/`、`receipts/`，另有给 hourly loop 用的 `backlog/` 和 `loop/`，以及存放 duty loop 停止文件的 `duty/`。除了 agent 会话，harness 额外增加的长期运行进程只有这两个 loop，唯一的运行时依赖是 Bun。
 
 ### 两种会话运行时
 
-会话运行在 herdr 或 hc（[herdr-core](https://releases.herdr.dev/core/install.sh)）上，一个 home 里可以同时有两种运行时的会话。harness 通过 `src/runtime/` 里的一个接口和它们打交道，每条存下来的 lane 和角色都记得是哪个运行时打开了它，所以无论当前选的是哪个运行时，针对它的命令都会送到正确的地方。新会话在 `DORI_RUNTIME` 指定的运行时上打开，否则看 `$DORI_HOME/config.json` 里的 `"runtime": "herdr"` 或 `"runtime": "hc"`；两者都没设置时，Dori 在 hc 终端里选 hc，在 herdr pane 里选 herdr，否则在装了 hc 时选 hc，没有就选 herdr。hc 是默认运行时；只有两个都不在 PATH 上时才会拒绝，并给出一行修复方法。`dori-harness status` 会先打印这个选择，形如 `RUNTIME hc (from config)`。在 Windows 上，hc 用 herdr-core 的官方安装程序安装。
+会话运行在 herdr 或 hc（[herdr-core](https://releases.herdr.dev/core/install.sh)）上，一个 home 里可以同时有两种运行时的会话。harness 通过 `src/runtime/` 里的一个接口和它们打交道，每条存下来的 lane 和角色都记得是哪个运行时打开了它，所以无论当前选的是哪个运行时，针对它的命令都会送到正确的地方。新会话在 `DORI_RUNTIME` 指定的运行时上打开，否则看 `$DORI_HOME/config.json` 里的 `"runtime": "herdr"` 或 `"runtime": "hc"`；两者都没设置时，Dori 在 hc 终端里选 hc，在 herdr pane 里选 herdr，否则在装了 hc 时选 hc，没有就选 herdr。hc 是默认运行时；只有两个都不在 PATH 上时才会拒绝，并给出一行修复方法。`dori status` 会先打印这个选择，形如 `RUNTIME hc (from config)`。
 
-hc 上没有工作区和标签页：Dori 为每个会话打开一个带标签的终端，会话状态只来自 agent 自己的报告（一个 OSC 7501 序列，最近的 omo 版本会发送）；从不报告的 agent 保持 `unknown`，发给它的消息在 inbox 里等待。`dori-harness migrate --to hc --all`（或 `--lane <key>`、`--role duty-loop`，加 `--dry-run` 只看计划）把会话搬到另一个运行时：它抓取一份交接 brief，打开替代会话，搬走 inbox，关闭旧会话，每个会话打印 `MIGRATED`、`SKIP`、`DEFERRED` 或 `MIGRATE_ROLLBACK`。逐个动词的对应关系见 [`docs/runtime.md`](docs/runtime.md)。
+hc 上没有工作区和标签页：Dori 为每个会话打开一个带标签的终端，会话状态只来自 agent 自己的报告（一个 OSC 7501 序列，最近的 omo 版本会发送）；从不报告的 agent 保持 `unknown`，发给它的消息在 inbox 里等待。`dori migrate --to hc --all`（或 `--lane <key>`、`--role duty-loop`，加 `--dry-run` 只看计划）把会话搬到另一个运行时：它抓取一份交接 brief，打开替代会话，搬走 inbox，关闭旧会话，每个会话打印 `MIGRATED`、`SKIP`、`DEFERRED` 或 `MIGRATE_ROLLBACK`。逐个动词的对应关系见 [`docs/runtime.md`](docs/runtime.md)。
 
 ## harness 强制执行什么
 
@@ -191,13 +170,13 @@ lead 是唯一和你说话的会话（`prompts/lead.md`）。lane 规则把每�
 
 ### READY 需要证据
 
-没有至少一个 `--evidence` 链接、没有最终回答文本时，`dori-harness ready` 会拒绝。两者都存在 lane 记录里，而 `dori-harness done` 会拒绝任何不是 `ready` 的 lane，所以没有 lane 能在没有记录回答的情况下关闭。
+没有至少一个 `--evidence` 链接、没有最终回答文本时，`dori ready` 会拒绝。两者都存在 lane 记录里，而 `dori done` 会拒绝任何不是 `ready` 的 lane，所以没有 lane 能在没有记录回答的情况下关闭。
 
 ### 忙碌的 pane 从不被打断，也不会重复发送
 
-`dori-harness send` 先向 herdr 询问 pane 的 agent 状态。`idle` 或 `done` 的 pane 立即收到消息；其他状态的则把消息排进 `~/.dori/inbox/`，等 pane 空闲后由 duty loop 一次性批量投递。前台是 shell 的 pane 从不会被输入，因为输入的文字会被当作命令执行。
+`dori send` 先向 herdr 询问 pane 的 agent 状态。`idle` 或 `done` 的 pane 立即收到消息；其他状态的则把消息排进 `~/.dori/inbox/`，等 pane 空闲后由 duty loop 一次性批量投递。前台是 shell 的 pane 从不会被输入，因为输入的文字会被当作命令执行。
 
-如果投递失败时文字可能已经到达 pane，之后只会补按 Enter，而且只按进当初输入文字的那个 agent；如果 herdr 这时看到的是另一个 agent，该条目会被搁置，lead 会收到一次 `[DELIVERY-AMBIGUOUS <pane>]`，由 `dori-harness inbox ack` 或 `dori-harness inbox resend` 手动解决。
+如果投递失败时文字可能已经到达 pane，之后只会补按 Enter，而且只按进当初输入文字的那个 agent；如果 herdr 这时看到的是另一个 agent，该条目会被搁置，lead 会收到一次 `[DELIVERY-AMBIGUOUS <pane>]`，由 `dori inbox ack` 或 `dori inbox resend` 手动解决。
 
 ### 10、20 和 40 分钟的提醒
 
@@ -205,9 +184,9 @@ lead 是唯一和你说话的会话（`prompts/lead.md`）。lane 规则把每�
 
 ### merge 需要精确 head 上的 CLEAR receipt 和全绿的检查
 
-`dori-harness merge` 用 `gh` 读取 PR 的 head SHA，然后要求 `~/.dori/receipts/` 中有一份针对该 SHA、结论为 `CLEAR` 的 receipt。只有 `dori-harness review` 会写 receipt：它基于 `prompts/review.md` 运行一个全新的非交互式 omo，固定在该 SHA 上；如果 reviewer 没有打印 `VERDICT:` 行，就不写 receipt。
+`dori merge` 用 `gh` 读取 PR 的 head SHA，然后要求 `~/.dori/receipts/` 中有一份针对该 SHA、结论为 `CLEAR` 的 receipt。只有 `dori review` 会写 receipt：它基于 `prompts/review.md` 运行一个全新的非交互式 omo，固定在该 SHA 上；如果 reviewer 没有打印 `VERDICT:` 行，就不写 receipt。
 
-接着 `gh pr checks` 必须返回至少一个检查，每个检查都必须是 `pass` 或 `skipping`，且至少一个是 `pass`。空的检查列表会被拒绝，理由是 "an empty check list is never green"。review 之后的 push 会改变 head SHA，receipt 就不再匹配，`dori-harness review` 需要重新运行。
+接着 `gh pr checks` 必须返回至少一个检查，每个检查都必须是 `pass` 或 `skipping`，且至少一个是 `pass`。空的检查列表会被拒绝，理由是 "an empty check list is never green"。review 之后的 push 会改变 head SHA，receipt 就不再匹配，`dori review` 需要重新运行。
 
 ### 给你自己工具用的 hook
 
@@ -306,10 +285,10 @@ dori 以和 omo 相同的方式发送匿名使用计数：以 OTLP/HTTP JSON 日
 |---|---|---|
 | `dori.installed` | 首次运行 | 无 |
 | `dori.daily_active` | 每个 UTC 日一次，任意 dori 命令触发 | `day_utc` |
-| `dori.lane_started` | `dori-harness start` | `open_lanes` |
-| `dori.lane_ready` | `dori-harness ready` | `evidence_count`, `lane_minutes` |
-| `dori.review_completed` | `dori-harness review` | `verdict`：`CLEAR` 或 `BLOCK` |
-| `dori.merge_decided` | 不带 `--dry-run` 的 `dori-harness merge` | `outcome` |
+| `dori.lane_started` | `dori start` | `open_lanes` |
+| `dori.lane_ready` | `dori ready` | `evidence_count`, `lane_minutes` |
+| `dori.review_completed` | `dori review` | `verdict`：`CLEAR` 或 `BLOCK` |
+| `dori.merge_decided` | 不带 `--dry-run` 的 `dori merge` | `outcome` |
 | `dori.duty_summary` | 最多每小时一次，来自 duty loop | `ticks`, `flushed`, `nudges`, `escalations`, `lost` |
 
 每条记录还带有服务名称和版本、安装哈希、一个 CI 标志、操作系统类型和版本，以及 CPU 架构。从不发送：路径、仓库名、PR 编号、lane key、brief、消息或任何其他文本。命令最多等待发送 2 秒，遥测失败从不会让命令失败。
@@ -324,16 +303,14 @@ bun run ci                                        # biome, tsc, knip, the 250-li
 
 harness 的测试在假的 herdr、假的 hc 和假的 gh 上运行，时钟由测试推进；端到端测试会在隔离的会话里启动真实的 herdr 服务器或真实的 hc core，用一个假的 agent 脚本代替 omo，各自的二进制不在 PATH 上时自行跳过。Dori mode 的测试在假的 herdr、git 和 gh 上运行，不碰任何真实的东西。CI 在 Ubuntu 和 macOS 上运行同样的测试。
 
-Windows 配置有自己的测试（仅 Windows）：`cd profile; bun test`。被跟踪的文件里有硬编码的用户路径或个人信息时，`bun scripts/check-paths.ts` 会失败。
-
 ## 这不是什么
 
 harness 是最小版本，不是我们的生产栈。有意省略的部分：跨机器网格、heavy-slot 调度、聊天和工单跟踪系统的桥接，以及整套测试的 receipt。只依靠 herdr 和 omo 就能运行的部分都在这里：角色、lane、inbox、duty loop、hourly loop 和 backlog，以及 review 和 merge gate。Dori mode 是一个独立的 CLI，有自己的消息组件、host guard 和 heavy-slot runner；harness 不从它导入任何东西。
 
 ## 参与贡献
 
-每位贡献者只需签署一次[贡献者许可协议](https://github.com/sisyphuslabs/dori-superagent/blob/main/CLA.md)：在第一个 pull request 下评论 `I have read the CLA Document and I hereby sign the CLA`，CLA Assistant 检查会记录下来。各项门禁、测试命令和 pull request 规则见 [CONTRIBUTING.md](CONTRIBUTING.md)。
+win-dori 没有 CLA。不是 Windows 专属的改动请提到上游（上游要求贡献者签署其 CLA），下一次移植时会进入 win-dori。各项门禁、测试命令和 pull request 规则见 [CONTRIBUTING.md](CONTRIBUTING.md)。
 
 ## 许可证
 
-从移植上游 [7ac0ed7](https://github.com/sisyphuslabs/dori-superagent/commit/7ac0ed761dfb6aa0b3a81e8740a29cde5cbd0444) 起，win-dori 和上游一样采用 [Sustainable Use License](LICENSE) 1.0 版，第三方组件遵循各自的许可证。它允许个人使用、企业内部使用和免费的非商业使用；商业使用需要所有者 Sisyphus Labs 的许可。win-dori 改了什么见 [NOTICE.md](NOTICE.md)。`fa86ddf` 及之前的 win-dori 版本是 MIT，继续是 MIT。`prompts/` 里的提示词就是代理实际收到的指令，短到可以在信任之前读完。
+[Sustainable Use License](LICENSE) 1.0 版，与 omo 使用的许可证相同，第三方组件遵循各自的许可证。它覆盖你自己的内部业务用途以及非商业或个人用途；商业用途需要向所有者取得许可。`ba96abf` 之前的提交以 MIT 许可证发布。

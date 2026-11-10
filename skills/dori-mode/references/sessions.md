@@ -31,12 +31,12 @@ Write the brief like a careful prompt:
 | `file <path> [sha256=<hex>] [json:.a.b=<json value>]` | the file exists, its sha256 matches, and the JSON field equals the value |
 | `url <http(s) url> [status=200] [body~"regex"]` | a GET returns that status, and the body matches if a regex is given |
 
-The last three are for work that never lands as a PR: a local setup, a QA pass, a running service. Write the check so that it can fail. `command ["bun","test"]` is a real check, because bun test exits nonzero when any test fails, while `command ["true"]` checks nothing. bun writes its test summary to stderr and `stdout~` only reads stdout, so rely on the exit code (or wrap the command in a shell that merges `2>&1` when you really need a regex). The watcher runs commands itself, in the lane's directory, as a plain argv with no shell. They have a 2-minute limit. It never trusts the lane's own report that something passed. Relative file paths resolve from the lane's directory, and `~` is your home (`~/x` and `~\x` both work). A Windows path like `C:\Users\ana\qa-passed` is taken literally: a backslash that doesn't start a valid JSON escape stays a backslash. Write commands as argv (`["bun","test"]`), not `["sh","-c",...]`, so the same line runs on Windows, macOS and Linux. A command that isn't found fails like any other. JSON values compare as JSON, so `json:.n=3` and `json:.n="3"` are different checks.
+The last three are for work that never lands as a PR: a local setup, a QA pass, a running service. Write the check so that it can fail. `command ["bun","test"] stdout~" 0 fail"` is a real check, while `command ["true"]` checks nothing. The watcher runs commands itself, in the lane's directory, as a plain argv with no shell. They have a 2-minute limit. It never trusts the lane's own report that something passed. Relative file paths resolve from the lane's directory, and `~` is your home (`~/x` and `~\x` both work; a Windows path such as `C:\a\b` is taken literally). JSON values compare as JSON, so `json:.n=3` and `json:.n="3"` are different checks.
 
 Example for a QA-only lane:
 
 ```
-Done = command ["bun","test"]; file qa/report.json json:.passed=true; url http://localhost:3000/health body~"ready"
+Done = command ["bun","test"] stdout~" 0 fail"; file qa/report.json json:.passed=true; url http://localhost:3000/health body~"ready"
 ```
 
 Work no script can check (a design review, a judgement call) stays in the lane's own plan. You judge it yourself before the claim.
@@ -61,7 +61,7 @@ How the session id is found for a pane, in order:
 2. `PI_SESSION_ID` in the environment of one of its child processes;
 3. the session file whose timestamp falls within three minutes after the agent process started.
 
-On macOS and Linux the processes come from `ps`, and step 2 reads child environments with `ps eww`. On Windows one `powershell.exe` call lists the processes (`Win32_Process`, with command lines and start times), the agent is matched as `omo`, `omo.exe`, `omo.cmd` or `senpi\dist\bundle\cli.js` with either slash, and step 2 reads each child's environment block directly from the process. Where that read is denied, step 3 still works. Session folders are named from the working directory with `\`, `/` and `:` turned into `-`, so `C:\a\b` becomes `--C--a-b--`.
+On Windows the processes come from one `powershell.exe` CIM call instead of `ps`, step 2 reads each child's environment block directly, and the session folder for `C:\a\b` is `--C--a-b--`.
 
 The id from step 1 is the session the agent was launched with. If someone switches sessions inside the agent, only steps 2 and 3 notice.
 

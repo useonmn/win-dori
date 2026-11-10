@@ -3,23 +3,20 @@
 # Needs git. Installs bun and herdr (or hc, when DORI_RUNTIME or config.json "runtime" says hc) with their official
 # installers when they are missing (DORI_NO_DEPS=1 skips that).
 # Optional env: DORI_REPO (owner/name, clone URL or local path; a private owner/name needs `gh auth login`),
-# DORI_SRC (checkout dir), SKILLS_DIR (where your agent loads skills), DORI_HOME (config dir, default ~\.dori).
-# Then it places the Windows Dori setup from profile/ (profile\install-profile.ps1). It asks nothing: the Dori asks for
-# the messenger tokens in conversation (open omo in herdr, say "Dori mode"), and `dori setup` saves them and registers
-# the autostart task. Profile env: DORI_ASK_SECRETS=1 (prompt in this terminal instead, for DORI_MESSENGER = slack,
-# telegram or discord, asked when unset),
-# DORI_DRY_RUN=1 (show changes only), DORI_FORCE=1 (replace edited files, with backups),
-# DORI_SKIP_PROFILE=1 (CLI and skill only), DORI_NO_TASK=1, DORI_NO_USER_ENV=1 (leave the user PATH alone),
+# DORI_SRC (checkout dir), SKILLS_DIR (where your agent loads skills),
 # DORI_NO_PULL=1 (or true, yes: install an existing checkout as it is, without pulling),
+# DORI_NO_USER_ENV=1 (leave the user PATH alone).
+# It copies config.example.json to ~\.dori\config.json when that is missing, then places the Windows logon boot script
+# and registers the autostart task (profile\install-profile.ps1). Profile env: DORI_DRY_RUN=1 (show changes only),
+# DORI_FORCE=1 (replace edited files, with backups), DORI_SKIP_PROFILE=1 (CLI and skill only), DORI_NO_TASK=1,
 # DORI_NAME (your Dori's name for the herdr workspace and the autostart task; default "name" in config.json, else Dori).
-# Secrets go only to %USERPROFILE%\.dori\<messenger>.env, never to user environment variables.
 $ErrorActionPreference = 'Stop'
 
 $repo = if ($env:DORI_REPO) { $env:DORI_REPO } else { 'useonmn/win-dori' }
 
 $userHome = if ($env:USERPROFILE) { $env:USERPROFILE } else { [Environment]::GetFolderPath('UserProfile') }
 $noUserEnv = $env:DORI_NO_USER_ENV -eq '1'
-$doriHome = if ($env:DORI_HOME) { $env:DORI_HOME } else { Join-Path $userHome '.dori' }
+$doriHome = Join-Path $userHome '.dori'
 $skills = if ($env:SKILLS_DIR) { $env:SKILLS_DIR } else { Join-Path $userHome '.agents\skills' }
 $src = if ($env:DORI_SRC) { $env:DORI_SRC } else { Join-Path $doriHome 'src' }
 # install.ps1 run from inside a checkout installs that copy, wherever it is: no clone, no network, and any path
@@ -60,7 +57,7 @@ if (-not (Get-Command bun -ErrorAction SilentlyContinue)) {
 }
 # The session runtime, as dori picks it: DORI_RUNTIME, else "runtime" in the Dori's config.json, else herdr. hc (herdr-core)
 # comes from its official installer, like herdr from its own.
-$doriConfig = Join-Path $(if ($env:DORI_HOME) { $env:DORI_HOME } else { Join-Path $userHome '.dori' }) 'config.json'
+$doriConfig = Join-Path $doriHome 'config.json'
 $runtime = if ($env:DORI_RUNTIME) { $env:DORI_RUNTIME } elseif (Test-Path -LiteralPath $doriConfig) {
   try { [string](Get-Content -LiteralPath $doriConfig -Raw -Encoding utf8 | ConvertFrom-Json).runtime } catch { '' }
 } else { '' }
@@ -166,14 +163,6 @@ try {
 }
 finally { Pop-Location }
 
-Push-Location $src
-try {
-  Invoke-Native 'bun install (harness)' { bun install --silent }
-  Invoke-Native 'bun link (harness)' { bun link --silent }
-}
-catch { Write-Warning "harness setup skipped: $_" }
-finally { Pop-Location }
-
 function Get-PathKey([string]$Path) {
   try { [IO.Path]::GetFullPath($Path).TrimEnd('\') } catch { $Path.TrimEnd('\') }
 }
@@ -192,26 +181,18 @@ if (-not (Get-Command dori -ErrorAction SilentlyContinue)) { Write-Warning "dori
 
 New-Item -ItemType Directory -Force -Path $doriHome | Out-Null
 $config = Join-Path $doriHome 'config.json'
+if (-not (Test-Path -LiteralPath $config)) {
+  Copy-Item -LiteralPath (Join-Path $skillSrc 'references\config.example.json') -Destination $config
+}
 $profileScript = Join-Path $src 'profile\install-profile.ps1'
 if ($env:DORI_SKIP_PROFILE -ne '1' -and (Test-Path -LiteralPath $profileScript)) {
-  # The messenger library (Slack, Telegram, Discord) and the Slack listener's agent-slackbot come from agent-messenger,
-  # a bun global package.
-  $bunHome = if ($env:BUN_INSTALL) { $env:BUN_INSTALL } else { Join-Path $userHome '.bun' }
-  if (-not (Test-Path -LiteralPath (Join-Path $bunHome 'install\global\node_modules\agent-messenger\package.json'))) {
-    if ($env:DORI_DRY_RUN -eq '1') { Write-Host 'Would install agent-messenger@2.39.0 (bun add -g)' }
-    else { Invoke-Native 'bun add -g agent-messenger' { bun add -g agent-messenger@2.39.0 } }
-  }
   $flags = @('-DoriHome', $doriHome)
   if ($env:DORI_DRY_RUN -eq '1') { $flags += '-DryRun' }
   if ($env:DORI_FORCE -eq '1') { $flags += '-Force' }
   if ($env:DORI_NO_TASK -eq '1') { $flags += '-NoTask' }
-  if ($env:DORI_ASK_SECRETS -eq '1') { $flags += '-AskSecrets' }
   $ps = (Get-Process -Id $PID).Path
   Invoke-Native 'profile\install-profile.ps1' { & $ps -NoProfile -ExecutionPolicy Bypass -File $profileScript @flags }
 }
-elseif (-not (Test-Path -LiteralPath $config)) {
-  Copy-Item -LiteralPath (Join-Path $skillSrc 'references\config.example.json') -Destination $config
-}
 
 Write-Host "Installed. Source: $src  Skill: $link  CLI: dori  Config: $config"
-Write-Host "Next: open herdr, start omo (install and log in to it first), and say: Dori mode. The Dori asks for the messenger tokens."
+Write-Host "Next: edit $config, then tell your agent: Dori mode"

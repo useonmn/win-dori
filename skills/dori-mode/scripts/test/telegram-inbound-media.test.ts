@@ -9,7 +9,6 @@ import {
   fileTgInboundStore,
   pollTelegramInbound,
   telegramInboundLoop,
-  telegramOwnerVar,
 } from "../src/messenger/telegram-inbound.ts";
 import { fakeClock, withState } from "./fakes.ts";
 
@@ -186,12 +185,4 @@ test("--loop re-polls immediately after a productive poll and sleeps only when i
   });
   expect(out.map((i) => i.updateId)).toEqual([200]); // productive poll, then immediate re-poll
   expect(sleeps).toEqual([60_000]); // slept only after the idle poll
-});
-
-test("the owner id is read from DORI_TELEGRAM_OWNER_ID, else from DORI_TELEGRAM_OWNER that windori's setup writes", () => {
-  expect(telegramOwnerVar({ DORI_TELEGRAM_OWNER_ID: "1", DORI_TELEGRAM_OWNER: "2" })).toBe("DORI_TELEGRAM_OWNER_ID");
-  expect(telegramOwnerVar({ DORI_TELEGRAM_OWNER: "2" })).toBe("DORI_TELEGRAM_OWNER");
-  // Neither set: the error names the upstream variable.
-  expect(telegramOwnerVar({})).toBe("DORI_TELEGRAM_OWNER_ID");
-  expect(() => envInt(telegramOwnerVar({}), undefined)).toThrow("DORI_TELEGRAM_OWNER_ID is not set");
 });

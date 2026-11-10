@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { mkdtempSync, readdirSync, readFileSync, renameSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { type FsOps, readJsonFile, writeJsonAtomic } from "../src/fsx";
+import { type FsOps, writeJsonAtomic } from "../src/fsx";
 
 let dir: string;
 beforeEach(() => {
@@ -40,10 +40,10 @@ const fakeOps = (windows: boolean, rename: FsOps["rename"]) => {
 const leftoverTmp = (): string[] => readdirSync(dir).filter((f) => f.endsWith(".tmp"));
 
 describe("writeJsonAtomic", () => {
-  test("writes JSON that readJsonFile reads back, creating the directory", async () => {
+  test("writes JSON that reads back, creating the directory", async () => {
     const path = join(dir, "lanes", "a.json");
     await writeJsonAtomic(path, { key: "a", n: 1 });
-    expect(readJsonFile<{ key: string; n: number }>(path)).toEqual({ key: "a", n: 1 });
+    expect(JSON.parse(readFileSync(path, "utf8"))).toEqual({ key: "a", n: 1 });
     expect(leftoverTmp()).toEqual([]);
   });
 
@@ -92,12 +92,6 @@ describe("writeJsonAtomic", () => {
     const path = join(dir, "lane.json");
     await Promise.all(Array.from({ length: 20 }, (_, i) => writeJsonAtomic(path, { i })));
     expect(leftoverTmp()).toEqual([]);
-    expect(readJsonFile<{ i: number }>(path)).not.toBeNull();
-  });
-});
-
-describe("readJsonFile", () => {
-  test("returns null for a file that does not exist", () => {
-    expect(readJsonFile(join(dir, "gone.json"))).toBeNull();
+    expect(JSON.parse(readFileSync(path, "utf8"))).toHaveProperty("i");
   });
 });

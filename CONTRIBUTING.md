@@ -4,7 +4,7 @@ Thanks for looking. This repository is a small, strict codebase; a change lands 
 
 ## Upstream first
 
-win-dori is the Windows port of [dori-superagent](https://github.com/sisyphuslabs/dori-superagent). A change that is not specific to Windows belongs upstream: open it there (upstream asks contributors to sign its CLA), and it reaches win-dori with the next port. Here, send what only Windows needs: paths, PowerShell, cmd and Git Bash quoting, process handling, the Windows profile.
+win-dori is the Windows port of [dori-superagent](https://github.com/sisyphuslabs/dori-superagent). A change that is not specific to Windows belongs upstream: open it there (upstream asks contributors to sign its CLA), and it reaches win-dori with the next port. Here, send what only Windows needs: paths, PowerShell, cmd and Git Bash quoting, process and file-lock handling, the Windows profile, `install.ps1`.
 
 ## Run the gates
 
@@ -23,7 +23,7 @@ bun run ci
 - `test` — the harness suite.
 - `test:skill` — the skill's script suite.
 
-The unit suites need `bun` and `git`, run offline, and use recorded stand-ins for `herdr` and `gh`; on Windows also run `cd profile && bun test` for the Windows profile. `test/e2e.test.ts` starts a real `herdr` server and is skipped when `herdr` is not on `PATH`; `test/e2e-hc.test.ts` does the same with `hc`.
+The unit suites need `bun` and `git`, run offline, and use recorded stand-ins for `herdr` and `gh`. `test/e2e.test.ts` starts a real `herdr` server and is skipped when `herdr` is not on `PATH`.
 
 ## A pull request
 

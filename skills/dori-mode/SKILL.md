@@ -19,9 +19,9 @@ Run once, in order. Details and commands: `references/setup.md`.
 
 1. Run inside herdr or hc. It is how you open, read and message sessions, and they survive restarts. With both installed it runs on hc unless `"runtime": "herdr"` is set in `~/.dori/config.json` (`DORI_RUNTIME` overrides it); `dori boot` prints the one in use as `RUNTIME <kind> (from <source>)`.
 2. Install agent-messenger, ask the owner which platform (Telegram, Discord, Slack, ...), and wait for the answer. If it is Slack, also ask: user token (a real member with a paid seat the owner pays for, sees everything that member sees, can show online) or bot token (an app, no seat cost, only invited channels and its scopes). Give that trade-off in one short list and wait.
-3. Get the bot and its tokens. If `dori setup aside` says `ASIDE_READY`, ask whether the owner makes the bot or you do (through Aside); otherwise guide the owner step by step. Never take a token in the chat or in a command line: the chat is stored and cannot be masked. The tokens reach `dori setup <messenger>` through an owner-only file it opens in Notepad (`--prepare`, then `--from FILE`), or, when you made the bot, straight from an Aside script's stdout (`--from-command`). It validates them, derives the other ids, saves `~/.dori/<messenger>.env` owner-only, and names what it could not derive; ask the owner one short question for each. Then give the bot its avatar (default `assets/dori-avatar.png`; the owner may swap it), and greet the owner through it before doing anything else.
-4. Install the scripts in `scripts/` (one command, see `references/setup.md`; skip it when an installer already put `dori` on PATH) and write `~/.dori/config.json` from `references/config.example.json` unless one exists.
-5. Subscribe to new messages with your monitor tool (the `MONITOR` line `dori setup` printed). Transcribe voice messages (`dori transcribe`) and treat the transcript as the owner's message.
+3. Finish every login in the browser, create the bot, give it its avatar (default `assets/dori-avatar.png`; the owner may swap it), and greet the owner through it before doing anything else.
+4. Install the scripts in `scripts/` (one command, see `references/setup.md`) and write `~/.dori/config.json` from `references/config.example.json`.
+5. Subscribe to new messages with your monitor tool. Transcribe voice messages (`dori transcribe`) and treat the transcript as the owner's message.
 6. Run onboarding (below), unless it has been done before.
 
 ## Onboarding
@@ -111,5 +111,4 @@ Real work runs in its own session, called a lane: a herdr tab, or a labelled ter
 | `dori guard` | host load, memory, disk and pane-count alerts |
 | `dori heavy <label> -- <cmd>` | run a heavy command only when a slot is free and load is low |
 | `dori can-launch` | is there room for a new lane? exit 4 with the reasons if not |
-| `dori setup <messenger>` / `dori setup aside` | conversational token setup: validate, derive ids, save the owner-only env file; is the Aside browser CLI ready? |
 | `dori send` / `dori presence` / `dori transcribe` | messenger utilities: post or edit on Slack, Telegram or Discord; stay shown online; voice note to text |

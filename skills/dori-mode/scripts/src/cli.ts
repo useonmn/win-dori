@@ -6,8 +6,7 @@ import { journalCommands, journalErrors } from "./cli-journal.ts";
 import { laneCommands } from "./cli-lanes.ts";
 import { messengerCommands, messengerErrors } from "./cli-messenger.ts";
 import { opsCommands } from "./cli-ops.ts";
-import { setupCommands } from "./cli-setup.ts";
-import { ConfigError, loadConfig, loadEnvFiles } from "./config.ts";
+import { ConfigError, loadConfig } from "./config.ts";
 import type { FlowDeps } from "./done-flow.ts";
 import { LaunchError } from "./launch.ts";
 import { CHECK_MS, type MonitorKind, monitorKind, takeMonitor } from "./monitor-guard.ts";
@@ -53,16 +52,9 @@ const USAGE = `dori <command> [options]
   heavy <label> -- <command ...>       run a heavy command when a slot is free and load is low
   can-launch                           exit 0 if the host has room for a new lane, else print why and exit 4
   send <slack|telegram|discord> --to TARGET --text TEXT [--thread ID] [--edit ID]
-                                       post or edit a message (tokens from ~/.dori/<messenger>.env or DORI_SLACK_TOKEN, DORI_TELEGRAM_TOKEN, DORI_DISCORD_TOKEN)
+                                       post or edit a message (tokens from DORI_SLACK_TOKEN, DORI_TELEGRAM_TOKEN, DORI_DISCORD_TOKEN)
   presence <slack|discord>             keep the account shown as online until stopped
   transcribe <audio-file>              run hooks.transcribe and print the text
-  setup <slack|telegram|discord> --prepare [--no-open]
-                                       create the owner-only token file (~/.dori/<messenger>-setup.txt), open it in Notepad
-  setup <messenger> --check            is ~/.dori/<messenger>.env complete? exit 0, or 2 with the missing keys (no network)
-  setup <messenger> [--from FILE | --stdin | --from-command -- CMD ...] [--set KEY=VALUE ...] [--dry-run] [--no-socket]
-                                       validate the tokens, derive the other ids, write ~/.dori/<messenger>.env (owner-only),
-                                       seed the Slack listener cursor, run hooks.autostart; tokens never in argv or output
-  setup aside                          exit 0 if the Aside browser CLI is installed, signed in and has a connected profile
   inbound slack|telegram [--loop MIN]  print INBOUND lines: Slack unread thread replies / Telegram owner DMs, edits and media + configured topic
                                        the Dori posted in (any helper), DMs and channels with unread mentions`;
 
@@ -71,7 +63,6 @@ const config = await loadConfig().catch((e: unknown) =>
 );
 const deps: FlowDeps = { run, clock: realClock, registry: new Registry(config.stateDir), config };
 const [command = "", ...rest] = process.argv.slice(2);
-await loadEnvFiles();
 
 const flags = parseArgs({
   args: rest,
@@ -94,14 +85,6 @@ const flags = parseArgs({
     text: { type: "string" },
     edit: { type: "string" },
     kind: { type: "string" },
-    from: { type: "string" },
-    stdin: { type: "boolean" },
-    set: { type: "string", multiple: true },
-    "dry-run": { type: "boolean" },
-    "no-socket": { type: "boolean" },
-    prepare: { type: "boolean" },
-    check: { type: "boolean" },
-    "no-open": { type: "boolean" },
     step: { type: "string" },
     result: { type: "string" },
     "remote-effect": { type: "string", multiple: true },
@@ -112,6 +95,7 @@ const flags = parseArgs({
     rule: { type: "string" },
     outcome: { type: "string" },
     lesson: { type: "string" },
+    "dry-run": { type: "boolean" },
     global: { type: "boolean" },
     source: { type: "string" },
     open: { type: "boolean" },
@@ -123,7 +107,6 @@ const commands: Readonly<Record<string, Command>> = {
   ...laneCommands,
   ...opsCommands,
   ...messengerCommands,
-  ...setupCommands,
 };
 const handler = Object.hasOwn(commands, command) ? commands[command] : undefined;
 

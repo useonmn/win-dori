@@ -16,8 +16,6 @@ export type Hooks = {
   readonly threadReply?: ArgvTemplate;
   readonly threadDone?: ArgvTemplate;
   readonly transcribe?: ArgvTemplate;
-  /** Run by `dori setup <messenger>` once its env file is complete, e.g. to register a logon task; `{src}` and `{home}` are filled. */
-  readonly autostart?: ArgvTemplate;
 };
 
 export type GuardThresholds = {
@@ -84,34 +82,6 @@ export const defaultConfig = (home = homedir()): DoriConfig => ({
     defaults: { wallMinutes: null, tokens: null, costUsd: null },
   },
 });
-
-/** A messenger's secrets file (~/.dori/<messenger>.env, or DORI_ENV_FILE for all): `KEY=VALUE` lines, kept out of the user's persistent environment. */
-export const envFilePath = (home = homedir(), messenger = "slack"): string =>
-  process.env["DORI_ENV_FILE"] ?? join(home, ".dori", `${messenger}.env`);
-
-/** Loads every messenger's secrets file that exists (slack.env, telegram.env, discord.env), or only DORI_ENV_FILE when set. */
-export const loadEnvFiles = async (
-  home = homedir(),
-  env: Record<string, string | undefined> = process.env,
-): Promise<void> => {
-  const paths = process.env["DORI_ENV_FILE"]
-    ? [process.env["DORI_ENV_FILE"]]
-    : ["slack", "telegram", "discord"].map((m) => envFilePath(home, m));
-  for (const p of paths) await loadEnvFile(p, env);
-};
-
-/** Loads the secrets file into `env`. The file wins over inherited values, so a stale token in the environment never shadows it. */
-export const loadEnvFile = async (
-  path = envFilePath(),
-  env: Record<string, string | undefined> = process.env,
-): Promise<void> => {
-  const file = Bun.file(path);
-  if (!(await file.exists())) return;
-  for (const line of (await file.text()).split(/\r?\n/)) {
-    const i = line.indexOf("=");
-    if (i > 0 && !line.trimStart().startsWith("#")) env[line.slice(0, i).trim()] = line.slice(i + 1).trim();
-  }
-};
 
 export const configPath = (): string => process.env["DORI_CONFIG"] ?? join(homedir(), ".dori", "config.json");
 
