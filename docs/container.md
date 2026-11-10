@@ -1,7 +1,5 @@
 # Running dori-superagent in a container
 
-> **Windows:** run it with Docker Desktop (WSL 2 backend). Inside the container it is the Linux path: `install.sh` and POSIX panes. The files are kept LF by `.gitattributes`.
-
 A container recipe for one long-lived container running the dori harness. There is no
 published image: you build it locally from `examples/container/` and keep your own
 credentials out of it — logins happen once, inside the running container, and persist in

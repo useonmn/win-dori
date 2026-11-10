@@ -129,7 +129,7 @@ describe("hourly loop", () => {
     w.gh = () => ({ code: 0, stdout: JSON.stringify({ state: "OPEN" }) });
 
     w.clock += 30 * 60_000;
-    expect((await tick({ maxStarts: 0 })).findings).toEqual([`vanished pane ${gone.paneId} is gone`]);
+    expect((await tick({ maxStarts: 0 })).findings).toEqual(["vanished pane " + gone.paneId + " is gone"]);
     w.clock += 4 * HOUR;
     await dutyTick(d);
     expect(d.store.lane("busy")!.lastActivityAt).toBe(w.clock);

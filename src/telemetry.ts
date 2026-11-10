@@ -69,7 +69,7 @@ export class Telemetry implements Usage {
     private readonly env: NodeJS.ProcessEnv = process.env,
     private readonly send: Sender = fetchSender,
     private readonly now: () => number = Date.now,
-    private readonly notice: (s: string) => void = (s) => process.stderr.write(`${s}\n`),
+    private readonly notice: (s: string) => void = (s) => process.stderr.write(s + "\n"),
     private readonly fsOps: FsOps = realFsOps,
   ) {}
 
@@ -98,7 +98,7 @@ export class Telemetry implements Usage {
   private load(): State {
     if (!existsSync(this.path)) {
       const tmp = `${this.path}.${process.pid}.${randomBytes(4).toString("hex")}.new`;
-      writeFileSync(tmp, `${JSON.stringify({ installId: randomBytes(16).toString("hex") })}\n`, { mode: 0o600 });
+      writeFileSync(tmp, JSON.stringify({ installId: randomBytes(16).toString("hex") }) + "\n", { mode: 0o600 });
       let linkError: unknown;
       try {
         retrying(() => linkSync(tmp, this.path), this.fsOps);
@@ -120,7 +120,7 @@ export class Telemetry implements Usage {
 
   private save(state: State): void {
     const tmp = `${this.path}.${process.pid}.tmp`;
-    replaceFile(tmp, this.path, `${JSON.stringify(state)}\n`, this.fsOps, 0o600);
+    replaceFile(tmp, this.path, JSON.stringify(state) + "\n", this.fsOps, 0o600);
   }
 
   touch(): void {
