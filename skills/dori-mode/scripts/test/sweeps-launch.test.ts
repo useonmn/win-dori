@@ -29,7 +29,7 @@ test("launch reports STARTUP_OK only on a ready agent status that shows a goal; 
     status: string | undefined | (string | undefined)[],
     screen: string | string[],
     key: string,
-    patch: { goalMarker?: string } = {},
+    patch: { goalMarker?: string; startupWaitSeconds?: number } = {},
   ) => {
     const statuses = Array.isArray(status) ? [...status] : [status];
     writeFileSync(brief, "# brief\n");
@@ -105,24 +105,22 @@ test("launch reports STARTUP_OK only on a ready agent status that shows a goal; 
     "STARTUP_UNCONFIRMED worded-lane w:p9",
   );
   expect(await run("idle", "No API key found\n❯ ", "err-lane")).toBe("STARTUP_ERROR err-lane w:p9: No API key");
-  expect(await run(undefined, "Error: Cannot find module 'x'\n$ ", "module-lane")).toBe(
-    "STARTUP_ERROR module-lane w:p9: Cannot find module",
-  );
-  // omo starts despite an extension it cannot load: its warning is no start failure.
+  expect(await run("blocked", "❯ ", "blocked-lane")).toStartWith("STARTUP_UNCONFIRMED blocked-lane w:p9");
+  expect(await run("done", "❯ ", "done-lane")).toStartWith("STARTUP_UNCONFIRMED done-lane w:p9");
+
+  // #202: omo starts despite a user extension it cannot load, so a line that is that warning is no start failure...
   const warning = `Warning: Failed to load extension "ext.js": Failed to load extension: Cannot find module '../gone.mjs'`;
   expect(await run("idle", [`${warning}\n❯ `, `${warning}\n${goal}`], "ext-warning-lane")).toBe(
     "STARTUP_OK ext-warning-lane w:p9",
   );
-  // A slow host: no agent status yet at the first check, then the agent comes up and sets its goal.
-  expect(
-    await run(
-      [undefined, undefined, undefined, "idle"],
-      ["PS> & omo", "PS> & omo", "PS> & omo", goal],
-      "slow-start-lane",
-    ),
-  ).toBe("STARTUP_OK slow-start-lane w:p9");
-  expect(await run("blocked", "❯ ", "blocked-lane")).toStartWith("STARTUP_UNCONFIRMED blocked-lane w:p9");
-  expect(await run("done", "❯ ", "done-lane")).toStartWith("STARTUP_UNCONFIRMED done-lane w:p9");
+  // ...but a real missing module on another line of the same screen still is, with or without a status.
+  const missing = `${warning}\nError: Cannot find module '/repo/dist/cli.js'\n$ `;
+  expect(await run(undefined, missing, "module-lane")).toBe("STARTUP_ERROR module-lane w:p9: Cannot find module");
+  expect(waits).toBe(1);
+  expect(await run(["unknown", "unknown", "idle"], ["PS> & omo", missing], "late-module-lane")).toBe(
+    "STARTUP_ERROR late-module-lane w:p9: Cannot find module",
+  );
+  expect(waits).toBe(2);
 });
 
 test("STARTUP_NO_GOAL names the time the launch really waited, not the planned 180 s", async () => {
