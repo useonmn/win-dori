@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, expect, test } from "bun:test";
+import { chmodSync, statSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { bootCheck, slackAuthCheck } from "../src/boot.ts";
+import { bootCheck, envSlackCheck, slackAuthCheck } from "../src/boot.ts";
 import { Slack } from "../src/messenger/slack.ts";
 import { Reports } from "../src/reports.ts";
 import { Worklog } from "../src/worklog.ts";
@@ -62,6 +63,40 @@ test("the Slack step reads auth.test through the client and fails when it return
   expect(bad.lines).toContain("SLACK auth failed");
   expect(bad.exitCode).toBe(1);
   expect(await slackAuthCheck(null)()).toBeNull();
+});
+
+test("a bad token file is a failed SLACK token-file line and boot still runs its other checks", async () => {
+  // Given a token file open to group and others, and a path with no file, read from the environment.
+  const open = join(state.dir, "slack-token");
+  writeFileSync(open, "xoxp-FIXTURE_SECRET\n");
+  chmodSync(open, 0o644);
+  // Windows reports 666 for any writable file; the line names whatever mode stat gives.
+  const mode = (statSync(open).mode & 0o777).toString(8);
+  const absent = join(state.dir, "absent");
+  const client = () => {
+    throw new Error("no Slack client is made for a bad token file");
+  };
+  const world = newWorld();
+  // When boot runs with each.
+  const wide = await bootCheck({
+    ...bootDeps(world),
+    slack: envSlackCheck(client, { DORI_SLACK_TOKEN_FILE: open }, "linux"),
+  });
+  const missing = await bootCheck({
+    ...bootDeps(world),
+    slack: envSlackCheck(client, { DORI_SLACK_TOKEN_FILE: absent }, "linux"),
+  });
+  // Then each names the file as a failed check, the local checks still ran, the run is incomplete, and no token shows.
+  expect(wide.lines).toContain(
+    `SLACK token-file: DORI_SLACK_TOKEN_FILE ${open} is open to group or others (mode ${mode}); chmod 600 it`,
+  );
+  expect(missing.lines).toContain(`SLACK token-file: DORI_SLACK_TOKEN_FILE ${absent} cannot be read`);
+  for (const r of [wide, missing]) {
+    expect(r.lines.some((l) => l.startsWith("RUNTIME "))).toBe(true);
+    expect(r.lines.at(-1)).toBe("BOOT incomplete read-only; nothing restarted, written or stopped");
+    expect(r.exitCode).toBe(1);
+    expect(r.lines.join("\n")).not.toContain("FIXTURE_SECRET");
+  }
 });
 
 test("Slack runs after the local checks and a stalled auth.test ends at the deadline", async () => {
