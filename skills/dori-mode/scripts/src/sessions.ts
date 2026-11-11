@@ -60,6 +60,20 @@ export const agentStatus = async (rts: Runtimes, ref: SessionRef): Promise<strin
   return status === "shell" || status === "gone" ? undefined : status;
 };
 
+/**
+ * The runtime's own status word for the lane's session. Unlike agentStatus it keeps `shell` (no agent in the session)
+ * apart from no status yet: hc lists a session whose program has not reported with no status, herdr an agent that has
+ * not reported as `unknown`. A session missing from the list is `gone`.
+ */
+export const launchStatus = async (rts: Runtimes, ref: SessionRef): Promise<{ status?: string; error?: string }> => {
+  try {
+    const found = (await rts.for(ref).list()).find((s) => s.ref.id === ref.id);
+    if (!found) return { status: "gone" };
+    return found.status === undefined ? {} : { status: found.status };
+  } catch (e) {
+    return { error: e instanceof Error ? e.message : String(e) };
+  }
+};
 /** Like agentStatus, but a failed lookup comes back as its error text instead of being swallowed. */
 export const statusLookup = async (
   rts: Runtimes,
