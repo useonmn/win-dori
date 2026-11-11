@@ -24,7 +24,7 @@ function renderPrompt(d: Deps, name: string): string {
  */
 export async function up(d: Deps, cwd: string): Promise<void> {
   const rt = d.runtimes.default;
-  const env = { DORI_HOME: d.store.root, DORI_CMD: d.doriCmd };
+  const env = { DORI_HOME: d.store.root };
   // The prompt path is quoted for the shell each new session runs (Windows: pwsh, Windows PowerShell, cmd or Git Bash).
   const agent = (name: string) => (shell: PaneShell) =>
     appendArg(`${d.agentCmd} --append-system-prompt`, renderPrompt(d, name), shell);

@@ -2,11 +2,8 @@ import { homedir } from "node:os";
 import { join } from "node:path";
 
 import type { RuntimeKind } from "../../../../src/runtime/types.ts";
-import { expandHome } from "./paths.ts";
 import type { SupervisionOptions } from "./supervision-observe.ts";
 import type { CommitIdentity } from "./verify-pr-check.ts";
-
-export { expandHome };
 
 export type PaneShellSetting = "auto" | "posix" | "pwsh" | "powershell" | "cmd";
 
@@ -87,6 +84,9 @@ export const defaultConfig = (home = homedir()): DoriConfig => ({
 });
 
 export const configPath = (): string => process.env["DORI_CONFIG"] ?? join(homedir(), ".dori", "config.json");
+
+export const expandHome = (path: string, home = homedir()): string =>
+  path === "~" ? home : path.startsWith("~/") ? join(home, path.slice(2)) : path;
 
 const isIdentity = (value: unknown): value is CommitIdentity => {
   const v = value as { name?: unknown; email?: unknown } | null;

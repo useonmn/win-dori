@@ -1,14 +1,6 @@
 import { expect, test } from "bun:test";
-import { join } from "node:path";
 
-import { baseName, expandHome, pathKey, samePath, scrubLocalPaths } from "../src/paths.ts";
-
-test("~ expands with either separator", () => {
-  expect(expandHome("~", "/h")).toBe("/h");
-  expect(expandHome("~/a/b", "/h")).toBe(join("/h", "a/b"));
-  expect(expandHome("~\\a", "/h")).toBe(join("/h", "a"));
-  expect(expandHome("C:\\x", "/h")).toBe("C:\\x");
-});
+import { baseName, pathKey, samePath, scrubLocalPaths } from "../src/paths.ts";
 
 test("git's forward-slash paths and Windows backslash paths compare equal on Windows, case-insensitively", () => {
   expect(samePath("C:/Repo/app/", "c:\\repo\\APP", true)).toBe(true);

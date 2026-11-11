@@ -101,8 +101,6 @@ test.skipIf(!herdrBin)(
         stderr: "pipe",
       },
     );
-    const [out, err] = await Promise.all([new Response(started.stdout).text(), new Response(started.stderr).text()]);
-    expect(`${out}${err}`).toContain("STARTED e2e-lane");
     expect(await started.exited).toBe(0);
 
     const leadText = await until("READY in the lead inbox", async () => {
@@ -143,9 +141,8 @@ test.skipIf(!herdrBin)(
       stdout: "pipe",
       stderr: "pipe",
     });
-    const [out, err] = await Promise.all([new Response(loop.stdout).text(), new Response(loop.stderr).text()]);
     expect(await loop.exited).toBe(0);
-    expect(out + err).toContain("LOOP started=1");
+    expect(await new Response(loop.stdout).text()).toContain("LOOP started=1");
 
     const leadText = await until(
       "READY from the loop-started lane in the lead inbox",

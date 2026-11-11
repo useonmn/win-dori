@@ -8,7 +8,7 @@ import { World } from "./fake.ts";
 import { captureIo } from "./inbox-setup.ts";
 
 describe("dori up", () => {
-  test("herdr: the same 8 calls as before runtimes existed (with win-dori's env), and all four roles registered", async () => {
+  test("herdr: the same 8 calls as before runtimes existed, and all four roles registered", async () => {
     const w = new World();
     const d = w.deps();
     const root = d.store.root;
@@ -31,10 +31,10 @@ describe("dori up", () => {
       "--no-focus",
       ...env.flatMap((e) => ["--env", e]),
     ];
-    // win-dori: every session gets DORI_HOME and DORI_CMD (the lead too), and on Windows each new pane's prompt is
+    // win-dori: every session gets DORI_HOME (the lead too), and on Windows each new pane's prompt is
     // waited for and its shell read before typing (pane wait-output / get / process-info, left out here).
     const probes = new Set(["wait-output", "get", "process-info"]);
-    const env = [`DORI_HOME=${root}`, "DORI_CMD=dori"];
+    const env = [`DORI_HOME=${root}`];
     expect(w.calls.filter((c) => !probes.has(c.argv[1] ?? "")).map((c) => [c.cmd, ...c.argv])).toEqual(
       [
         ["workspace", "create", "--label", "dori", "--cwd", "/w", ...env.flatMap((e) => ["--env", e]), "--no-focus"],

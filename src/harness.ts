@@ -54,7 +54,7 @@ export const defaultDeps = (): Deps => {
     exec: spawnExec,
     now: Date.now,
     agentCmd: process.env["DORI_AGENT_CMD"] ?? "omo",
-    doriCmd: process.env["DORI_CMD"] ?? doriCommand(CLI),
+    doriCmd: process.env["DORI_CMD"] ?? doriCommand(CLI, store.root),
     shell,
     host: () => ({ load1: load1(), cores: cpus().length, memFreePct: memFreePct() }),
     usage: new Telemetry(store.root),

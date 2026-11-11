@@ -43,7 +43,7 @@ export async function startLane(
       role: "lane",
       container: "tab",
       cwd,
-      env: { DORI_LANE: key, DORI_HOME: d.store.root, DORI_CMD: d.doriCmd },
+      env: { DORI_LANE: key, DORI_HOME: d.store.root },
       group,
     },
     (shell) => appendArg(d.agentCmd, kickoff, shell),

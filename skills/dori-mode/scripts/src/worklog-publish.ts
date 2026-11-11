@@ -4,12 +4,8 @@ import { existsSync, readFileSync, renameSync, rmSync, writeFileSync } from "nod
 import { realSyncRetry, retryTransientSync, type SyncRetryOps } from "./fsx.ts";
 import { WORKLOG_MARKER } from "./worklog-render.ts";
 
-// On Windows an editor may have saved the file with CRLF line ends; its first line still carries our marker.
-export const ownedOrAbsent = (path: string, windows: boolean): boolean => {
-  if (!existsSync(path)) return true;
-  const first = readFileSync(path, "utf8").split("\n", 1)[0]!;
-  return (windows ? first.replace(/\r$/, "") : first) === WORKLOG_MARKER;
-};
+export const ownedOrAbsent = (path: string): boolean =>
+  !existsSync(path) || readFileSync(path, "utf8").split("\n", 1)[0] === WORKLOG_MARKER;
 
 /**
  * Write a rendered worklog.md through a temp file and rename, so a reader never sees half a file. The marker is checked
@@ -27,7 +23,7 @@ export const publishWorklog = (
   try {
     writeFileSync(tmp, markdown, { encoding: "utf8", mode: 0o600 });
     beforeCheck();
-    if (!ownedOrAbsent(path, retry.windows)) return false;
+    if (!ownedOrAbsent(path)) return false;
     retryTransientSync(() => renameSync(tmp, path), retry);
     return true;
   } finally {

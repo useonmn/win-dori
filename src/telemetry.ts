@@ -105,8 +105,6 @@ export class Telemetry implements Usage {
       } catch (e) {
         if ((e as NodeJS.ErrnoException).code !== "EEXIST") linkError = e;
       }
-      // unlink, not rm: on Windows, Bun's rmSync of this second name now and then left the claimed telemetry.json
-      // refusing every later rename onto it with EPERM (9 of 4000 first runs; unlinkSync 0 of 4000), so no state was saved.
       // A failed unlink is thrown before a failed link, as the old finally block did.
       try {
         retrying(() => unlinkSync(tmp), this.fsOps);

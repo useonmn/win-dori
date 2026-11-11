@@ -33,51 +33,12 @@ function readLock(path: string): LockBody | "missing" | "corrupt" {
 const sameLock = (a: LockBody | "missing" | "corrupt", b: LockBody | "missing" | "corrupt"): boolean =>
   typeof a === "string" || typeof b === "string" ? a === b : a.nonce === b.nonce;
 
-type LockFile = ReturnType<typeof readLock>;
-export type LockDeps = Pick<Deps, "store" | "now">;
-
-/**
- * Moves the dead holder's lock `seen` aside, or says why this process must back off. Only the process holding the
- * `.takeover` guard may touch the lock, and it looks again under the guard: without that, a process that judged the
- * lock stale a moment ago could move the live lock a faster process just created, and a third could slip in.
- */
-function takeOver(path: string, tmp: string, seen: LockFile, nonce: string): string | undefined {
-  const guard = `${path}.takeover`;
-  try {
-    linkSync(tmp, guard);
-  } catch (e) {
-    if ((e as NodeJS.ErrnoException).code !== "EEXIST" && !isTransient(e)) throw e;
-    const other = readLock(guard);
-    if (other === "corrupt" || (typeof other !== "string" && !alive(other.pid))) removeFile(guard);
-    return "lock contended";
-  }
-  try {
-    if (!sameLock(readLock(path), seen)) return "lock changed hands during takeover";
-    const aside = `${path}.stale.${nonce}`;
-    try {
-      renameRetrying(path, aside);
-    } catch (e) {
-      if ((e as NodeJS.ErrnoException).code === "ENOENT") return undefined;
-      if (isTransient(e)) return "lock contended";
-      throw e;
-    }
-    if (!sameLock(readLock(aside), seen)) {
-      restore(aside, path);
-      return "lock changed hands during takeover";
-    }
-    removeFile(aside);
-    return undefined;
-  } finally {
-    removeFile(guard);
-  }
-}
-
 /**
  * The lock is created whole with link(2), so it never exists half-written. A dead holder's (or corrupt) lock is
- * moved aside with rename(2) under a guard only one process can hold; if what was moved is not the lock judged
- * stale, it is linked back and this process backs off.
+ * moved aside with rename(2), which only one process can win; if what was moved is not the lock judged stale, it
+ * is linked back and this process backs off.
  */
-export function acquire(d: LockDeps, path: string = d.store.lockPath("loop")): { nonce: string } | { holder: string } {
+export function acquire(d: Deps, path: string = d.store.lockPath("loop")): { nonce: string } | { holder: string } {
   const nonce = randomUUID();
   const tmp = `${path}.${nonce}`;
   writeFileSync(tmp, JSON.stringify({ pid: process.pid, at: d.now(), nonce }));
@@ -93,8 +54,18 @@ export function acquire(d: LockDeps, path: string = d.store.lockPath("loop")): {
       const seen = readLock(path);
       if (seen === "missing") continue;
       if (seen !== "corrupt" && alive(seen.pid)) return { holder: `locked by pid ${seen.pid}` };
-      const refused = takeOver(path, tmp, seen, nonce);
-      if (refused) return { holder: refused };
+      const aside = `${path}.stale.${nonce}`;
+      try {
+        renameRetrying(path, aside);
+      } catch (e) {
+        if ((e as NodeJS.ErrnoException).code === "ENOENT") continue;
+        throw e;
+      }
+      if (!sameLock(readLock(aside), seen)) {
+        restore(aside, path);
+        return { holder: "lock changed hands during takeover" };
+      }
+      removeFile(aside);
     }
     return { holder: "lock contended" };
   } finally {
@@ -107,7 +78,7 @@ export const holds = (d: Deps, nonce: string): boolean => {
   return typeof l !== "string" && l.nonce === nonce;
 };
 
-export function release(d: LockDeps, nonce: string, path: string = d.store.lockPath("loop")): void {
+export function release(d: Deps, nonce: string, path: string = d.store.lockPath("loop")): void {
   const aside = `${path}.release.${nonce}`;
   try {
     renameRetrying(path, aside);

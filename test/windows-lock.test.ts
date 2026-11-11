@@ -1,7 +1,8 @@
 import { afterAll, describe, expect, test } from "bun:test";
-import { existsSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
+import type { Deps } from "../src/harness.ts";
 import { acquire, release } from "../src/loop-lock.ts";
 import { Store } from "../src/store.ts";
 
@@ -16,7 +17,7 @@ describe("the loop lock", () => {
     await p.exited;
     return p.pid;
   };
-  const deps = () => ({ store: new Store(mkdtempSync(join(dir, "lock-"))), now: Date.now });
+  const deps = () => ({ store: new Store(mkdtempSync(join(dir, "lock-"))), now: Date.now }) as unknown as Deps;
 
   test("acquire and release leave nothing behind; a live holder blocks; a dead holder is taken over", async () => {
     const d = deps();
@@ -36,22 +37,8 @@ describe("the loop lock", () => {
     expect(lockFiles(d)).toEqual([]);
   });
 
-  test("a live takeover guard means back off; a dead one is cleared for the next try", async () => {
+  const race = async () => {
     const d = deps();
-    const guard = d.store.loopPath("lock.takeover");
-    writeFileSync(d.store.loopPath("lock"), "corrupt");
-    writeFileSync(guard, JSON.stringify({ pid: process.pid, at: 0, nonce: "busy" }));
-    expect(acquire(d)).toEqual({ holder: "lock contended" });
-    expect(readFileSync(d.store.loopPath("lock"), "utf8")).toBe("corrupt");
-    writeFileSync(guard, JSON.stringify({ pid: await deadPid(), at: 0, nonce: "gone" }));
-    expect(acquire(d)).toEqual({ holder: "lock contended" });
-    expect(existsSync(guard)).toBe(false);
-    expect("nonce" in acquire(d)).toBe(true);
-  });
-
-  const race = async (seed: (d: { store: Store }) => Promise<void> | void) => {
-    const d = deps();
-    await seed(d);
     const racer = resolve(import.meta.dir, "fixtures/lock-racer.ts");
     const procs = Array.from({ length: 6 }, () =>
       Bun.spawn([process.execPath, racer, d.store.root], { stdin: "pipe", stdout: "pipe", stderr: "inherit" }),
@@ -89,21 +76,5 @@ describe("the loop lock", () => {
     expect(lockFiles(d)).toEqual([]);
   };
 
-  test("real processes racing for a free lock: exactly one wins, and release clears it", () => race(() => {}), 60_000);
-  test(
-    "real processes racing to take over a dead holder: exactly one wins",
-    () =>
-      race(async (d) => {
-        writeFileSync(d.store.loopPath("lock"), JSON.stringify({ pid: await deadPid(), at: 0, nonce: "dead" }));
-      }),
-    60_000,
-  );
-  test(
-    "real processes racing over a corrupt lock: exactly one wins",
-    () =>
-      race((d) => {
-        writeFileSync(d.store.loopPath("lock"), '{"pid": 12');
-      }),
-    60_000,
-  );
+  test("real processes racing for a free lock: exactly one wins, and release clears it", () => race(), 60_000);
 });

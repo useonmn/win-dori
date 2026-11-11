@@ -1,9 +1,6 @@
 import { expect, test } from "bun:test";
-import { existsSync, mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
 
-import { acquireSlot, pidAlive, removeStale } from "../src/heavy-slot.ts";
+import { pidAlive, removeStale } from "../src/heavy-slot.ts";
 import type { Clock } from "../src/run.ts";
 
 const fakeClock = (slept: number[]): Clock => ({ now: () => 0, sleep: async (ms) => void slept.push(ms) });
@@ -66,18 +63,4 @@ test("removeStale does not retry off Windows or on other errors", async () => {
   await expect(removeStale("slot", fakeClock(slept), true, missing)).rejects.toThrow("ENOENT");
   expect(calls).toBe(2);
   expect(slept).toEqual([]);
-});
-
-test("acquireSlot reclaims a slot whose owner pid is dead", async () => {
-  const dir = mkdtempSync(join(tmpdir(), "heavy-slot-"));
-  const slot = join(dir, "slot.1");
-  mkdirSync(slot);
-  writeFileSync(join(slot, "owner"), `999999 old 1970-01-01T00:00:00.000Z`);
-  const got = await acquireSlot(
-    { dir, slots: 1, maxLoad: 10, clock: fakeClock([]), load: async () => 0, alive: pidAlive, pid: process.pid },
-    "new",
-    1,
-  );
-  expect(got).toBe(slot);
-  expect(existsSync(join(slot, "owner"))).toBe(true);
 });

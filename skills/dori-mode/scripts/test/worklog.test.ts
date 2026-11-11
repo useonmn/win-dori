@@ -148,27 +148,6 @@ test("concurrent CLI adds from separate processes lose no item, in the record or
   }
 });
 
-test("on Windows a worklog.md re-saved with CRLF line ends is still ours; on POSIX the \\r makes it someone's notes", () => {
-  for (const windows of [true, false]) {
-    // Given our worklog.md after an editor saved it with CRLF line ends.
-    const state = withState();
-    try {
-      const log = new Worklog(state.dir, { windows, sleep: () => {} });
-      writeFileSync(log.markdownPath, `${WORKLOG_MARKER}\r\n# Worklog\r\n`);
-      // When the next change renders it; then Windows replaces it and POSIX keeps it and refuses.
-      if (windows) {
-        log.add("After the edit", "slack:D1/6.1", T0);
-        expect(readFileSync(log.markdownPath, "utf8")).toContain("After the edit");
-      } else {
-        expect(() => log.add("After the edit", "slack:D1/6.1", T0)).toThrow("was not written by dori worklog");
-        expect(readFileSync(log.markdownPath, "utf8")).toBe(`${WORKLOG_MARKER}\r\n# Worklog\r\n`);
-      }
-    } finally {
-      state.done();
-    }
-  }
-});
-
 test("on Windows a publish whose rename is refused for a moment (EPERM) is retried; on POSIX it is final", () => {
   for (const windows of [true, false]) {
     const state = withState();

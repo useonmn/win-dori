@@ -49,12 +49,12 @@ describe("pane command lines", () => {
   });
 
   test("the default dori command is one form for all four shells on Windows and stays POSIX elsewhere", () => {
-    expect(doriCommand("D:\\code\\dori\\src\\cli.ts", true)).toBe("bun D:/code/dori/src/cli.ts");
-    expect(doriCommand("C:\\Program Files\\windori\\src\\cli.ts", true)).toBe(
+    expect(doriCommand("D:\\code\\dori\\src\\cli.ts", "D:\\h", true)).toBe("bun D:/code/dori/src/cli.ts");
+    expect(doriCommand("C:\\Program Files\\windori\\src\\cli.ts", "D:\\h", true)).toBe(
       'bun "C:/Program Files/windori/src/cli.ts"',
     );
-    expect(doriCommand("/opt/dori/src/cli.ts", false)).toBe("bun /opt/dori/src/cli.ts");
-    expect(doriCommand("/home/a b/it's/cli.ts", false)).toBe("bun '/home/a b/it'\\''s/cli.ts'");
+    expect(doriCommand("/opt/dori/src/cli.ts", "/h", false)).toBe("DORI_HOME='/h' bun '/opt/dori/src/cli.ts'");
+    expect(doriCommand("/home/a b/it's/cli.ts", "/h", false)).toBe("DORI_HOME='/h' bun '/home/a b/it'\\''s/cli.ts'");
   });
 
   const tricky = [
@@ -139,7 +139,7 @@ describe("pane command lines", () => {
       mkdirSync(spaced);
       cpSync(fixture, join(spaced, "argv.ts"));
       const out = join(dir, `dori-${shell}.json`).replaceAll("\\", "/");
-      await inShell(shell, exe!, `${doriCommand(join(spaced, "argv.ts"))} ${out} report one --status waiting`);
+      await inShell(shell, exe!, `${doriCommand(join(spaced, "argv.ts"), dir)} ${out} report one --status waiting`);
       expect(JSON.parse(readFileSync(out, "utf8"))).toEqual(["report", "one", "--status", "waiting"]);
     }, 30_000);
   });
@@ -169,7 +169,6 @@ describe("pane command lines", () => {
     expect(w.panes.get(up[2]!)!.ran).toEqual(["dori loop"]);
     const hourlySplit = w.calls.filter((c) => c.argv[1] === "split").at(-1)!;
     expect(hourlySplit.argv).toContain("HERDR_WORKSPACE_ID=w1");
-    expect(hourlySplit.argv.some((a) => a.startsWith("DORI_CMD="))).toBe(true);
   });
 
   test("a new session's own shell decides the quoting, not the one this CLI runs in", async () => {

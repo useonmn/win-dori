@@ -88,16 +88,8 @@ export const terminal = (address: string) => hc("get", address);
 export const statusOf = (t: Record<string, unknown>): string | undefined =>
   (t["status"] as { state?: string } | null)?.state;
 export const screen = async (address: string): Promise<string> => String((await hc("read", address))["text"] ?? "");
-// A timeout carries the terminal's screen and record, so a failure on a CI runner shows what the session was doing.
 export const waitStatus = (address: string, word: string) =>
-  until(`${address} ${word}`, async () => (statusOf(await terminal(address)) === word ? true : undefined)).catch(
-    async (e: unknown) => {
-      const seen = await Promise.all([screen(address), terminal(address)]).catch((err: unknown) => [String(err), ""]);
-      throw new Error(
-        `${e instanceof Error ? e.message : String(e)}\nscreen:\n${seen[0]}\nrecord: ${JSON.stringify(seen[1])}`,
-      );
-    },
-  );
+  until(`${address} ${word}`, async () => (statusOf(await terminal(address)) === word ? true : undefined));
 
 let corePid: number | undefined;
 

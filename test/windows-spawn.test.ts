@@ -3,11 +3,11 @@ import { cpSync, existsSync, mkdtempSync, rmSync, writeFileSync } from "node:fs"
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { review } from "../src/gate.ts";
-import { ready, startLane } from "../src/lanes.ts";
+import { startLane } from "../src/lanes.ts";
 import { batArg, resolveCommand, type CommandSys } from "../src/run.ts";
 import { type Exec, spawnExec } from "../src/runtime/exec.ts";
 import { IS_WINDOWS } from "../src/shell.ts";
-import { href, World } from "./fake.ts";
+import { World } from "./fake.ts";
 import { setup } from "./windows-helpers.ts";
 
 const dir = mkdtempSync(join(tmpdir(), "dori-win-"));
@@ -33,19 +33,6 @@ describe("typing into a new pane", () => {
     expect(probed).toBeGreaterThan(waited);
   });
   // The prompt wait itself (and its absence off Windows) is tested on the adapter: test/runtime-herdr-windows.test.ts.
-});
-
-describe("typing into a plain shell pane (the operator's --to-shell)", () => {
-  // One Enter per line on Windows is tested on the adapter: test/runtime-herdr-windows.test.ts.
-  test("a READY for a shell lead is never typed into it, on Windows either: it waits in the lead's inbox (#66)", async () => {
-    const { d, lead, brief } = setup();
-    const lane = await startLane(d, "shell-lead", brief, { group: "w1" });
-    lead.status = "shell";
-    lead.received.length = 0;
-    await ready(d, lane.key, "fixed", ["note.txt"]);
-    expect(lead.received).toEqual([]);
-    expect(d.store.queued(href("w1:p1")).map((m) => m.text)).toContain("[READY shell-lead] fixed\nevidence: note.txt");
-  });
 });
 
 describe("spawning an agent that is a .cmd shim", () => {

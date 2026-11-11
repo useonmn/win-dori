@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, expect, test } from "bun:test";
+import { afterEach, expect, test } from "bun:test";
 import { join } from "node:path";
 
 import { ConfigError, defaultConfig, expandHome, fill, loadConfig } from "../src/config.ts";
@@ -6,10 +6,6 @@ import { footer } from "../src/launch-footer.ts";
 import { withState } from "./fakes.ts";
 
 const state = withState();
-// An inherited DORI_STATE_DIR (a lead shell, an isolated test run) would override every stateDir this file checks.
-beforeEach(() => {
-  delete process.env["DORI_STATE_DIR"];
-});
 afterEach(() => {
   delete process.env["DORI_STATE_DIR"];
 });
@@ -116,10 +112,9 @@ test("hook templates fill each argument separately, so text with spaces or quote
   expect(argv).toEqual(["notify", "--thread", "chat:1/2", "--text", `it's "done"; rm -rf /`]);
 });
 
-test("expandHome handles ~ with either separator and a Windows home", () => {
+test("expandHome handles ~ and a Windows home", () => {
   expect(expandHome("~", "C:\\Users\\ana")).toBe("C:\\Users\\ana");
   expect(expandHome("~/code", "/home/ana")).toBe(join("/home/ana", "code"));
-  expect(expandHome("~\\code", "/home/ana")).toBe(join("/home/ana", "code"));
   expect(expandHome("/abs/path", "/home/ana")).toBe("/abs/path");
 });
 

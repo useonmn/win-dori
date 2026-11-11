@@ -1,5 +1,6 @@
 // Shell-aware command lines for the sessions dori types into; ported from windori's launch.ts.
 
+import { shq } from "./delivery.ts";
 import type { SessionRef, SessionRuntime } from "./runtime/types.ts";
 
 export type PaneShell = "posix" | "pwsh" | "powershell" | "cmd";
@@ -93,9 +94,12 @@ const neutralPath = (path: string): string => {
   return /^[\w./:-]+$/.test(p) ? p : `"${p}"`;
 };
 
-/** The default dori command, which prompts carry and panes run. Off Windows it keeps its POSIX form. */
-export const doriCommand = (cli: string, windows: boolean = IS_WINDOWS): string =>
-  `bun ${windows ? neutralPath(cli) : quoteArg(cli, "posix")}`;
+/**
+ * The default dori command, which prompts carry and panes run. Off Windows it is upstream's POSIX form; on Windows the
+ * sessions get DORI_HOME in their env instead, since pwsh, PowerShell 5.1 and cmd have no `VAR=value command` form.
+ */
+export const doriCommand = (cli: string, root: string, windows: boolean = IS_WINDOWS): string =>
+  windows ? `bun ${neutralPath(cli)}` : `DORI_HOME=${shq(root)} bun ${shq(cli)}`;
 
 export const shellFromProcess = (name: string): PaneShell | undefined => {
   const n = (name.split(/[\\/]/).pop() ?? "").toLowerCase().replace(/\.exe$/, "");

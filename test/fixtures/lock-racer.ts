@@ -1,8 +1,9 @@
+import type { Deps } from "../../src/harness.ts";
 import { acquire, release } from "../../src/loop-lock.ts";
 import { Store } from "../../src/store.ts";
 
 // One contender for the loop lock in its own process: races on "go", holds what it won until stdin closes.
-const d = { store: new Store(process.argv[2]!), now: Date.now };
+const d = { store: new Store(process.argv[2]!), now: Date.now } as unknown as Deps;
 const stdin = Bun.stdin.stream().getReader();
 console.log("READY");
 await stdin.read();

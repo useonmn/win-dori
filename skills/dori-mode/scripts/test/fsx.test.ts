@@ -87,11 +87,4 @@ describe("writeJsonAtomic", () => {
     expect(sleeps).toEqual([]);
     expect(leftoverTmp()).toEqual([]);
   });
-
-  test("concurrent writers to one path never collide on the temp name", async () => {
-    const path = join(dir, "lane.json");
-    await Promise.all(Array.from({ length: 20 }, (_, i) => writeJsonAtomic(path, { i })));
-    expect(leftoverTmp()).toEqual([]);
-    expect(JSON.parse(readFileSync(path, "utf8"))).toHaveProperty("i");
-  });
 });

@@ -57,7 +57,7 @@ export class Store {
 
   private writeJson(path: string, value: unknown): void {
     const tmp = `${path}.${process.pid}.tmp`;
-    replaceFile(tmp, path, `${JSON.stringify(value, null, 2)}\n`, this.fsOps);
+    replaceFile(tmp, path, JSON.stringify(value, null, 2) + "\n", this.fsOps);
   }
 
   lane(key: string): Lane | undefined {

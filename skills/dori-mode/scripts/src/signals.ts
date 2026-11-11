@@ -1,7 +1,7 @@
+import { homedir } from "node:os";
 import { isAbsolute, join } from "node:path";
 
 import { fetchHttp, type Http } from "./messenger/http.ts";
-import { expandHome } from "./paths.ts";
 import type { Runner } from "./run.ts";
 import { parseSignal, type Signal, SignalSyntaxError, splitDone } from "./signals-parse.ts";
 
@@ -20,7 +20,8 @@ const publishedVersions = (out: string): unknown[] => {
 };
 
 const resolvePath = (p: string, io: SignalIo): string => {
-  const expanded = expandHome(p, io.home);
+  const home = io.home ?? homedir();
+  const expanded = p === "~" ? home : p.startsWith("~/") ? join(home, p.slice(2)) : p;
   return isAbsolute(expanded) ? expanded : join(io.cwd ?? process.cwd(), expanded);
 };
 

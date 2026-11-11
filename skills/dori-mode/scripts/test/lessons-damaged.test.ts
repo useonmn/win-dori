@@ -73,12 +73,12 @@ test("a malformed or unknown field is rejected by name, and an immutable change 
   const original = readFileSync(lessons.path, "utf8");
   writeFileSync(
     lessons.path,
-    `${[
+    [
       original.trimEnd(),
       JSON.stringify({ ...added, outcome: "done" }),
       JSON.stringify({ ...added, extra: 1 }),
       JSON.stringify({ ...added, cwd: "/other" }),
-    ].join("\n")}\n`,
+    ].join("\n") + "\n",
   );
   // When reading.
   const read = lessons.read();

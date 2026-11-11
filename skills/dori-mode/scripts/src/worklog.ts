@@ -199,7 +199,7 @@ export class Worklog {
   }
 
   private ensureOwnedMarkdown(): void {
-    if (!ownedOrAbsent(this.markdownPath, this.retry.windows))
+    if (!ownedOrAbsent(this.markdownPath))
       throw new WorklogError(
         `${this.markdownPath} was not written by dori worklog; move it aside before using the command`,
       );

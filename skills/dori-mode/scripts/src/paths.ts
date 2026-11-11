@@ -1,10 +1,4 @@
-import { homedir } from "node:os";
-import { join } from "node:path";
-
 export const IS_WINDOWS = process.platform === "win32";
-
-export const expandHome = (path: string, home = homedir()): string =>
-  path === "~" ? home : /^~[\\/]/.test(path) ? join(home, path.slice(2)) : path;
 
 /**
  * A comparable form of a path: forward slashes, no `\\?\` prefix, no trailing slash, and lower case on Windows,

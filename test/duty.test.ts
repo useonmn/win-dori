@@ -47,8 +47,7 @@ describe("duty loop", () => {
     expect(events).toContainEqual({ pane: "w1:p1", action: "flushed" });
     expect(lead.received.filter((m) => m.includes("to lead"))).toHaveLength(1);
     // The held batch is reported to the lead once (#111); the test is about the other pane still flushing, not about
-    // the lead's inbox holding one message. The notice comes in the same batch when w1:p9's inbox is flushed first, or
-    // as a second message when the lead's is (readdir order: NTFS sorts, so on Windows the lead goes first).
+    // the lead's inbox holding one message.
     expect(lead.received.filter((m) => m.includes("[DELIVERY-AMBIGUOUS w1:p9]"))).toHaveLength(1);
     expect(broken.received).toEqual([]);
   });

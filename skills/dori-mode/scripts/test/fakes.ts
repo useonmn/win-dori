@@ -142,10 +142,6 @@ export const depsFor = (w: World, clock: Clock, stateDir: string, patch: Partial
   return { run: fakeRunner(w), clock, registry: new Registry(stateDir), config, exists: () => true, env: {} };
 };
 
-/**
- * Runs argv with extra environment variables, like `env K=V cmd ...` but without the POSIX `env` binary, which a
- * Windows host may not have on PATH. Output is trimmed and a timeout reports 124, as the real Runner does.
- */
 /** Runs argv with the test's env plus `vars`; a variable set to undefined is removed, as `env -u` would. */
 export const runWithEnv = async (
   vars: Readonly<Record<string, string | undefined>>,

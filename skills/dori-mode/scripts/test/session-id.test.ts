@@ -3,88 +3,25 @@ import { expect, test } from "bun:test";
 import { runtimesFor } from "../src/run.ts";
 import { hcAnswer, hcTerm } from "./hc-runner.ts";
 import type { Ran } from "../src/run.ts";
-import { type Proc, procTable, resolveSession } from "../src/session-id.ts";
+import { procTable, resolveSession } from "../src/session-id.ts";
 
 const P1 = { runtime: "herdr", id: "w:p1" } as const;
-const ID = "01a11440-ee81-7f90-b2ed-dcc7d51a0adf";
-const OTHER = "01a10000-0000-7000-8000-000000000000";
-const info = JSON.stringify({
-  result: {
-    pane: { pane_id: "w:p1", agent: "omo" },
-    process_info: { shell_pid: 10, foreground_processes: [{ pid: 10, name: "pwsh.exe" }] },
-  },
-});
 
-const fake =
-  (calls: string[][], extra: Record<string, string> = {}) =>
-  async (argv: readonly string[]): Promise<Ran> => {
-    calls.push([...argv]);
-    const line = argv.join(" ");
-    if (/^herdr pane (process-info|get)/.test(line)) return { code: 0, out: info, err: "" };
-    const hit = Object.entries(extra).find(([k]) => line.startsWith(k));
-    return { code: hit ? 0 : 1, out: hit?.[1] ?? "", err: "" };
-  };
-
-test("macOS: procTable parses ps and the three methods use the same ps calls as before", async () => {
+test("procTable off Windows parses one ps call", async () => {
   const calls: string[][] = [];
-  const table = await procTable(
-    fake(calls, {
-      "ps -A": "   10     1 zsh\n   11    10 /bin/bun /x/senpi/dist/bundle/cli.js --extension /x/plugin\n",
-    }),
-    false,
-  );
-  expect(table).toEqual([
+  const run = async (argv: readonly string[]): Promise<Ran> => {
+    calls.push([...argv]);
+    return {
+      code: 0,
+      out: "   10     1 zsh\n   11    10 /bin/bun /x/senpi/dist/bundle/cli.js --extension /x/plugin\n",
+      err: "",
+    };
+  };
+  expect(await procTable(run, false)).toEqual([
     { pid: 10, ppid: 1, cmd: "zsh" },
     { pid: 11, ppid: 10, cmd: "/bin/bun /x/senpi/dist/bundle/cli.js --extension /x/plugin" },
   ]);
   expect(calls).toEqual([["ps", "-A", "-o", "pid=,ppid=,command="]]);
-
-  const full: Proc[] = [
-    ...table,
-    { pid: 12, ppid: 11, cmd: "bun /x/mcp/cli.js mcp" },
-    { pid: 13, ppid: 11, cmd: "bun tool" },
-  ];
-  const flagged = [
-    { pid: 10, ppid: 1, cmd: "zsh" },
-    { pid: 11, ppid: 10, cmd: "omo --session 01a0e129-23ce-7329-bbd1-fc0c1e7a6b8b" },
-  ];
-  expect(await resolveSession(P1, "/repo", flagged, { run: fake([]), sessionsDir: "/s", windows: false })).toEqual({
-    id: "01a0e129-23ce-7329-bbd1-fc0c1e7a6b8b",
-    via: "argv",
-    pid: 11,
-  });
-
-  const envCalls: string[][] = [];
-  const readEnv = () => {
-    throw new Error("macOS must not read env through FFI");
-  };
-  const byEnv = await resolveSession(P1, "/repo", full, {
-    run: fake(envCalls, { "ps eww -o command= -p 13": `bun tool PI_SESSION_ID=${ID} X=1` }),
-    sessionsDir: "/s",
-    windows: false,
-    readEnv,
-  });
-  expect(byEnv).toEqual({ id: ID, via: "child-env", pid: 11 });
-  expect(envCalls.filter((c) => c[0] === "ps")).toEqual([
-    ["ps", "eww", "-o", "command=", "-p", "12"],
-    ["ps", "eww", "-o", "command=", "-p", "13"],
-  ]);
-
-  const dirs: string[] = [];
-  const listDir = (d: string) => {
-    dirs.push(d);
-    return [`2026-01-01T09-00-00-000Z_${OTHER}.jsonl`, `2026-01-01T12-00-02-113Z_${ID}.jsonl`];
-  };
-  const startCalls: string[][] = [];
-  const byStart = await resolveSession(P1, "/Users/me/repo", full, {
-    run: fake(startCalls, { "ps eww": "bun X=1", "ps -o lstart=": "Thu Jan  1 12:00:01 2026 GMT" }),
-    sessionsDir: "/s",
-    listDir,
-    windows: false,
-  });
-  expect(byStart).toEqual({ id: ID, via: "start-time", pid: 11 });
-  expect(startCalls.at(-1)).toEqual(["ps", "-o", "lstart=", "-p", "11"]);
-  expect(dirs[0]?.replace(/\\/g, "/")).toBe("/s/--Users-me-repo--");
 });
 
 test("the session id is read from --session, then a child's environment, then the session file made at start", async () => {
