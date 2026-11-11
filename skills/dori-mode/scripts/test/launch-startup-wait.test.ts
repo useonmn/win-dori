@@ -31,7 +31,7 @@ test("an agent that has not reported is waited for until startupWaitSeconds; a l
     status: (string | undefined)[],
     screen: string | string[],
     key: string,
-    patch: { startupWaitSeconds?: number } = {},
+    patch: { startupWaitSeconds?: number; goalMarker?: string } = {},
   ) => {
     const statuses = [...status];
     world = newWorld();
@@ -73,6 +73,13 @@ test("an agent that has not reported is waited for until startupWaitSeconds; a l
     "STARTUP_UNCONFIRMED never w:p9: no ready agent status (unknown) after",
   );
   expect(waits).toBe(17);
+  // An agent that has not reported is never OK, even when its goal already shows, with or without a goal marker.
+  expect(await run(["unknown"], goal, "goal-unreported")).toStartWith(
+    "STARTUP_UNCONFIRMED goal-unreported w:p9: no ready agent status (unknown)",
+  );
+  expect(await run(["unknown"], goal, "goal-unreported-nomarker", { goalMarker: "" })).toStartWith(
+    "STARTUP_UNCONFIRMED goal-unreported-nomarker w:p9: no ready agent status (unknown)",
+  );
   // The wait is config: a 60 s host gives up after the first check and four re-reads.
   expect(await run(["unknown"], "PS> & omo", "short", { startupWaitSeconds: 60 })).toStartWith(
     "STARTUP_UNCONFIRMED short w:p9",
