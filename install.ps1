@@ -1,7 +1,7 @@
 # Installs the dori-mode skill and the `dori` CLI on Windows. One line, from any folder in PowerShell:
 #   irm https://raw.githubusercontent.com/useonmn/win-dori/main/install.ps1 | iex
-# Needs git. Installs bun and herdr (or hc, when DORI_RUNTIME or config.json "runtime" says hc) with their official
-# installers when they are missing (DORI_NO_DEPS=1 skips that).
+# Needs git, bun and a session runtime (hc or herdr), like install.sh it installs none of them: a missing one stops the
+# install with its link. Set the runtime first, $env:DORI_RUNTIME='hc' (or 'herdr'), unless config.json says it already.
 # Optional env: DORI_REPO (owner/name, clone URL or local path; a private owner/name needs `gh auth login`),
 # DORI_SRC (checkout dir), SKILLS_DIR (where your agent loads skills),
 # DORI_NO_PULL=1 (or true, yes: install an existing checkout as it is, without pulling),
@@ -27,49 +27,25 @@ if (-not $env:DORI_SRC -and $PSScriptRoot -and (Test-Path -LiteralPath (Join-Pat
   $fromCheckout = $true
 }
 
-# Prerequisites: bun and herdr come from their official installers, git from winget; DORI_NO_DEPS=1 only checks.
-$installDeps = $env:DORI_NO_DEPS -ne '1'
-function Update-SessionPath {
-  $env:Path = (@([Environment]::GetEnvironmentVariable('Path', 'Machine'), [Environment]::GetEnvironmentVariable('Path', 'User'), $env:Path) | Where-Object { $_ }) -join ';'
-}
-function Install-FromScript([string]$Name, [string]$Url) {
-  Write-Host "Installing $Name ($Url)"
-  # A child PowerShell, so an installer that calls exit cannot end this one.
-  & (Get-Process -Id $PID).Path -NoProfile -ExecutionPolicy Bypass -Command "irm '$Url' | iex"
-  if ($LASTEXITCODE -ne 0) { Write-Warning "$Name installer exited with $LASTEXITCODE" }
-  Update-SessionPath
-}
-if (-not (Get-Command git -ErrorAction SilentlyContinue)) {
-  if ($installDeps -and (Get-Command winget -ErrorAction SilentlyContinue)) {
-    Write-Host 'Installing git (winget Git.Git)'
-    winget install --id Git.Git -e --silent --accept-package-agreements --accept-source-agreements | Out-Host
-    Update-SessionPath
-  }
-  if (-not (Get-Command git -ErrorAction SilentlyContinue)) { throw 'git is required: https://git-scm.com/download/win (or: winget install Git.Git), then open a new terminal' }
-}
-if (-not (Get-Command bun -ErrorAction SilentlyContinue)) {
-  if ($installDeps) {
-    Install-FromScript 'bun' 'https://bun.sh/install.ps1'
-    $bunBin = Join-Path $(if ($env:BUN_INSTALL) { $env:BUN_INSTALL } else { Join-Path $userHome '.bun' }) 'bin'
-    if (-not (Get-Command bun -ErrorAction SilentlyContinue) -and (Test-Path -LiteralPath $bunBin)) { $env:Path = "$env:Path;$bunBin" }
-  }
-  if (-not (Get-Command bun -ErrorAction SilentlyContinue)) { throw 'bun is required: https://bun.sh' }
-}
-# The session runtime, as dori picks it: DORI_RUNTIME, else "runtime" in the Dori's config.json, else herdr. hc (herdr-core)
-# comes from its official installer, like herdr from its own.
+# Prerequisites are checked, never installed, as install.sh does.
+function Test-Command([string]$Name) { [bool](Get-Command $Name -ErrorAction SilentlyContinue) }
+$again = 'then open a new terminal and run install.ps1 again'
+if (-not (Test-Command git)) { throw "git is required: https://git-scm.com/download/win (or: winget install Git.Git), $again" }
+if (-not (Test-Command bun)) { throw "bun is required: https://bun.sh (PowerShell: irm bun.sh/install.ps1 | iex), $again" }
+# The session runtime, as dori picks it: DORI_RUNTIME, else "runtime" in the Dori's config.json, else hc or herdr on PATH.
 $doriConfig = Join-Path $doriHome 'config.json'
 $runtime = if ($env:DORI_RUNTIME) { $env:DORI_RUNTIME } elseif (Test-Path -LiteralPath $doriConfig) {
   try { [string](Get-Content -LiteralPath $doriConfig -Raw -Encoding utf8 | ConvertFrom-Json).runtime } catch { '' }
 } else { '' }
-if ($runtime -eq 'hc') {
-  if (-not (Get-Command hc -ErrorAction SilentlyContinue)) {
-    if ($installDeps) { Install-FromScript 'hc (herdr-core)' 'https://releases.herdr.dev/core/install.ps1' }
-    if (-not (Get-Command hc -ErrorAction SilentlyContinue)) { Write-Warning 'hc is not on PATH yet; the Dori needs it with runtime hc: https://github.com/herdrdev/herdr-core' }
-  }
-} elseif (-not (Get-Command herdr -ErrorAction SilentlyContinue)) {
-  if ($installDeps) { Install-FromScript 'herdr' 'https://herdr.dev/install.ps1' }
-  if (-not (Get-Command herdr -ErrorAction SilentlyContinue)) { Write-Warning 'herdr is not on PATH yet; the Dori needs it: https://herdr.dev' }
+$runtimeLink = @{ hc = 'https://github.com/herdrdev/herdr-core'; herdr = 'https://herdr.dev' }
+$pick = "Pick one: `$env:DORI_RUNTIME='hc' (herdr-core, $($runtimeLink.hc)) or `$env:DORI_RUNTIME='herdr' ($($runtimeLink.herdr)), install it, $again"
+if ($runtime) {
+  if ($runtime -cnotin @('hc', 'herdr')) { throw "The runtime must be hc or herdr, got '$runtime'. $pick" }
+  if (-not (Test-Command $runtime)) { throw "${runtime} is required for runtime ${runtime}: $($runtimeLink[$runtime]), $again" }
 }
+elseif (Test-Command hc) { $runtime = 'hc' }
+elseif (Test-Command herdr) { $runtime = 'herdr' }
+else { throw "No session runtime: DORI_RUNTIME is not set and neither hc nor herdr is on PATH. $pick" }
 
 function Invoke-Native([string]$What, [scriptblock]$Block) {
   & $Block
@@ -183,6 +159,10 @@ New-Item -ItemType Directory -Force -Path $doriHome | Out-Null
 $config = Join-Path $doriHome 'config.json'
 if (-not (Test-Path -LiteralPath $config)) {
   Copy-Item -LiteralPath (Join-Path $skillSrc 'references\config.example.json') -Destination $config
+}
+try { $configRuntime = [string](Get-Content -LiteralPath $config -Raw -Encoding utf8 | ConvertFrom-Json).runtime } catch { $configRuntime = '' }
+if ($configRuntime -and $configRuntime -cne $runtime) {
+  Write-Warning "$config says `"runtime`": `"$configRuntime`" but this install checked $runtime; set `"runtime`": `"$runtime`" there"
 }
 $profileScript = Join-Path $src 'profile\install-profile.ps1'
 if ($env:DORI_SKIP_PROFILE -ne '1' -and (Test-Path -LiteralPath $profileScript)) {

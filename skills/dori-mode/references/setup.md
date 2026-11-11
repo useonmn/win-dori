@@ -69,7 +69,7 @@ cd skills/dori-mode/scripts && bun install && bun link    # puts `dori` on PATH
 mkdir -p ~/.dori && cp ../references/config.example.json ~/.dori/config.json
 ```
 
-On Windows, run `install.ps1` instead (`irm https://raw.githubusercontent.com/useonmn/win-dori/main/install.ps1 | iex`, or `.\install.ps1` from a checkout); it does the same steps into `%USERPROFILE%\.dori\src`.
+On Windows, run `install.ps1` instead (`irm https://raw.githubusercontent.com/useonmn/win-dori/main/install.ps1 | iex`, or `.\install.ps1` from a checkout); it does the same steps into `%USERPROFILE%\.dori\src`. It only checks git, bun and the runtime and installs none of them, so set `$env:DORI_RUNTIME='hc'` (or `'herdr'`) before it runs, and open a new terminal afterwards so `dori` is found. A Slack bot token sends, but `dori inbound slack` needs a user token: with a bot token, run a separate Socket Mode receiver (not in this repo).
 
 Then edit `~/.dori/config.json`: at least `runtime` (`"herdr"` or `"hc"`), `leadPane` (your own session: `herdr pane current` on herdr, `echo $HC_TERMINAL_ID` on hc), `laneWorkspace` (a herdr workspace; on hc, the `dori.group` label the lane terminals get), `defaultCwd`, and the two hooks if you want lane threads updated automatically. On Windows, also check `paneShell`. `references/scripts.md` explains every field.
 

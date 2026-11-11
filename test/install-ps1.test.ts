@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, test } from "bun:test";
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { delimiter, join, resolve } from "node:path";
+import { delimiter, dirname, join, resolve } from "node:path";
 
 // The same scenarios as install.test.ts, against install.ps1 on Windows; a stub `bun` stands in for `bun install` and `bun link`.
 const script = resolve(import.meta.dir, "../install.ps1");
@@ -48,11 +48,16 @@ function setup(shell: string) {
   mkdirSync(home);
   mkdirSync(bin);
   writeFileSync(join(bin, "bun.cmd"), "@exit /b 0\r\n");
+  writeFileSync(join(bin, "hc.cmd"), "@exit /b 0\r\n");
   const upstreamCommit = (text: string) => {
     writeFileSync(join(upstream, cli), text);
     git(upstream, "commit", "-qam", text.trim());
   };
-  const install = (env: Record<string, string> = {}) => {
+  // path: the whole PATH, for the tests about a missing prerequisite; by default the stubs come first on the real PATH.
+  const install = (
+    env: Record<string, string> = {},
+    path = `${bin}${delimiter}${process.env["Path"] ?? process.env["PATH"] ?? ""}`,
+  ) => {
     const base: Record<string, string> = {};
     for (const [k, v] of Object.entries(process.env))
       if (v !== undefined && k.toLowerCase() !== "path" && !k.startsWith("DORI_")) base[k] = v;
@@ -61,12 +66,12 @@ function setup(shell: string) {
       env: {
         ...base,
         ...gitEnv,
-        Path: `${bin}${delimiter}${process.env["Path"] ?? process.env["PATH"] ?? ""}`,
+        Path: path,
         USERPROFILE: home,
         HOME: home,
         DORI_SRC: src,
         SKILLS_DIR: join(home, "skills"),
-        DORI_NO_DEPS: "1",
+        DORI_RUNTIME: "hc",
         DORI_SKIP_PROFILE: "1",
         DORI_NO_USER_ENV: "1",
         DORI_NO_TASK: "1",
@@ -75,7 +80,7 @@ function setup(shell: string) {
     });
     return { code: r.exitCode, err: r.stderr.toString() };
   };
-  return { root, upstream, src, home, cli, upstreamCommit, install };
+  return { root, upstream, src, home, bin, cli, upstreamCommit, install };
 }
 
 describe.skipIf(process.platform !== "win32")("install.ps1", () => {
@@ -153,6 +158,45 @@ describe.skipIf(process.platform !== "win32")("install.ps1", () => {
       expect(r.err).toContain("git's message above says why");
       expect(r.err).not.toContain("reset --hard");
       expect(readFileSync(join(src, cli), "utf8")).toBe("patched\n");
+    });
+
+    // git and the shell only: no bun, hc or herdr, whatever the host has installed.
+    const bare = () => {
+      const sys = process.env["SystemRoot"] ?? "C:\\Windows";
+      return [
+        dirname(Bun.which("git") as string),
+        join(sys, "System32"),
+        join(sys, "System32", "WindowsPowerShell", "v1.0"),
+      ];
+    };
+    const nothingInstalled = (home: string) => expect(existsSync(join(home, ".dori"))).toBe(false);
+
+    t(`${name}: a missing bun stops the install with its link and installs nothing`, () => {
+      const { home, install } = setup(name);
+      const r = install({}, bare().join(delimiter));
+      expect(r.code).toBe(1);
+      expect(r.err).toContain("bun is required: https://bun.sh");
+      nothingInstalled(home);
+    });
+
+    t(`${name}: the configured runtime missing stops the install with its link; herdr is never installed`, () => {
+      const { home, bin, install } = setup(name);
+      const r = install({ DORI_RUNTIME: "herdr" }, [bin, ...bare()].join(delimiter));
+      expect(r.code).toBe(1);
+      expect(r.err).toContain("herdr is required for runtime herdr: https://herdr.dev");
+      nothingInstalled(home);
+    });
+
+    t(`${name}: no runtime set and none on PATH says how to pick hc or herdr`, () => {
+      const { home, root, install } = setup(name);
+      const onlyBun = join(root, "only-bun");
+      mkdirSync(onlyBun);
+      writeFileSync(join(onlyBun, "bun.cmd"), "@exit /b 0\r\n");
+      const r = install({ DORI_RUNTIME: "" }, [onlyBun, ...bare()].join(delimiter));
+      expect(r.code).toBe(1);
+      expect(r.err).toContain("DORI_RUNTIME='hc'");
+      expect(r.err).toContain("DORI_RUNTIME='herdr'");
+      nothingInstalled(home);
     });
 
     t(`${name}: a failed fetch is not taken for local work: no reset is suggested`, () => {

@@ -59,13 +59,14 @@ Entrambe le installazioni mettono nel PATH un comando chiamato `dori`, quindi in
 
 ### Windows
 
-In PowerShell:
+Installa prima git, Bun e il runtime delle sessioni: install.ps1 li controlla e non ne installa nessuno. Scegli il runtime prima di installare, nella stessa PowerShell (qui `'hc'`, `'herdr'` per herdr):
 
 ```powershell
+$env:DORI_RUNTIME = 'hc'
 irm https://raw.githubusercontent.com/useonmn/win-dori/main/install.ps1 | iex
 ```
 
-Da un checkout di [useonmn/win-dori](https://github.com/useonmn/win-dori) si usa invece `.\install.ps1`. Installa git con winget se manca, e bun e herdr (o hc, quando il runtime scelto è hc) con i loro installer ufficiali. Clona win-dori in `%USERPROFILE%\.dori\src`, collega la skill in `%USERPROFILE%\.agents\skills\dori-mode` come directory junction e mette `dori` nel PATH utente. Poi installa il profilo Windows: uno script di avvio e un'attività dell'Utilità di pianificazione che avvia il tuo Dori quando accedi. I token del messenger sono variabili d'ambiente, come nella tabella sopra.
+Da un checkout di [useonmn/win-dori](https://github.com/useonmn/win-dori) si usa invece `powershell -ExecutionPolicy Bypass -File .\install.ps1`. Se manca git, bun o il runtime, l'installazione si ferma con il link per scaricarlo. Clona win-dori in `%USERPROFILE%\.dori\src`, collega la skill in `%USERPROFILE%\.agents\skills\dori-mode` come directory junction e mette `dori` nel PATH utente: dopo apri un nuovo terminale perché `dori` venga trovato. Poi installa il profilo Windows: uno script di avvio e un'attività dell'Utilità di pianificazione che avvia il tuo Dori quando accedi. Imposta `"runtime"` in `%USERPROFILE%\.dori\config.json` sullo stesso runtime (l'esempio copiato dice `herdr`). I token del messenger sono variabili d'ambiente, come nella tabella sopra. Un token bot di Slack (`xoxb-`) può inviare, ma `dori inbound slack` legge i messaggi solo con un token utente: con un token bot serve un ricevitore Socket Mode separato, che questo repo non include.
 
 ### Dori mode, il bot con cui parli
 

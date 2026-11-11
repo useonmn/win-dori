@@ -59,13 +59,14 @@ Both installs put a command named `dori` on your PATH, so install one per machin
 
 ### Windows
 
-In PowerShell:
+Install git, Bun and the session runtime first: install.ps1 checks them and installs none of them. Pick the runtime before you install, in the same PowerShell (`'hc'` here, `'herdr'` for herdr):
 
 ```powershell
+$env:DORI_RUNTIME = 'hc'
 irm https://raw.githubusercontent.com/useonmn/win-dori/main/install.ps1 | iex
 ```
 
-From a checkout of [useonmn/win-dori](https://github.com/useonmn/win-dori), run `.\install.ps1` instead. It installs git with winget when git is missing, and bun and herdr (or hc, when hc is the selected runtime) with their official installers. It clones win-dori to `%USERPROFILE%\.dori\src`, links the skill into `%USERPROFILE%\.agents\skills\dori-mode` as a directory junction, and puts `dori` on your user PATH. Then it places the Windows profile: a boot script and a Task Scheduler task that starts your Dori when you log on. The messenger tokens are environment variables, as in the table above.
+From a checkout of [useonmn/win-dori](https://github.com/useonmn/win-dori), run `powershell -ExecutionPolicy Bypass -File .\install.ps1` instead. A missing git, bun or runtime stops the install with its download link. It clones win-dori to `%USERPROFILE%\.dori\src`, links the skill into `%USERPROFILE%\.agents\skills\dori-mode` as a directory junction, and puts `dori` on your user PATH: open a new terminal afterwards so `dori` is found. Then it places the Windows profile: a boot script and a Task Scheduler task that starts your Dori when you log on. Set `"runtime"` in `%USERPROFILE%\.dori\config.json` to the same runtime (the copied example says `herdr`). The messenger tokens are environment variables, as in the table above. A Slack bot token (`xoxb-`) can send, but `dori inbound slack` reads messages only with a user token: with a bot token you need a separate Socket Mode receiver, which this repo does not include.
 
 ### Dori mode, the bot you talk to
 

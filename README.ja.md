@@ -59,13 +59,14 @@ Slackでは、Doriをどう見せるかをセットアップ時に選びます�
 
 ### Windows
 
-PowerShell で:
+先に git、Bun、セッションのランタイムを入れてください。install.ps1 はこれらを確認するだけで、どれもインストールしません。インストールの前に、同じ PowerShell でランタイムを選びます(ここでは `'hc'`、herdr なら `'herdr'`):
 
 ```powershell
+$env:DORI_RUNTIME = 'hc'
 irm https://raw.githubusercontent.com/useonmn/win-dori/main/install.ps1 | iex
 ```
 
-[useonmn/win-dori](https://github.com/useonmn/win-dori) のチェックアウトからなら、代わりに `.\install.ps1` を実行します。git がなければ winget で入れ、bun と herdr(ランタイムに hc を選んでいれば hc)はそれぞれの公式インストーラーで入れます。win-dori を `%USERPROFILE%\.dori\src` にクローンし、スキルをディレクトリジャンクションとして `%USERPROFILE%\.agents\skills\dori-mode` にリンクし、`dori` をユーザーの PATH に置きます。最後に Windows プロファイルを配置します。ブートスクリプトと、ログオン時に Dori を起動するタスクスケジューラのタスクです。メッセンジャーのトークンは、上の表のとおり環境変数で渡します。
+[useonmn/win-dori](https://github.com/useonmn/win-dori) のチェックアウトからなら、代わりに `powershell -ExecutionPolicy Bypass -File .\install.ps1` を実行します。git、bun、ランタイムのどれかがなければ、ダウンロードリンクを示してインストールを止めます。win-dori を `%USERPROFILE%\.dori\src` にクローンし、スキルをディレクトリジャンクションとして `%USERPROFILE%\.agents\skills\dori-mode` にリンクし、`dori` をユーザーの PATH に置きます。`dori` が見つかるよう、終わったら新しいターミナルを開いてください。最後に Windows プロファイルを配置します。ブートスクリプトと、ログオン時に Dori を起動するタスクスケジューラのタスクです。`%USERPROFILE%\.dori\config.json` の `"runtime"` も同じランタイムにしてください(コピーされた例は `herdr` です)。メッセンジャーのトークンは、上の表のとおり環境変数です。Slack のボットトークン(`xoxb-`)は送信はできますが、`dori inbound slack` はユーザートークンでしかメッセージを読めません。ボットトークンで使うには別の Socket Mode 受信プログラムが必要で、このリポジトリには含まれていません。
 
 ### Dori mode、あなたが話しかけるボット
 

@@ -59,13 +59,14 @@ Beide Installationen legen einen Befehl namens `dori` in deinen PATH, installier
 
 ### Windows
 
-In PowerShell:
+Installiere zuerst git, Bun und die Sitzungs-Laufzeit: install.ps1 prüft sie und installiert keine davon. Wähle die Laufzeit vor der Installation, in derselben PowerShell (hier `'hc'`, für herdr `'herdr'`):
 
 ```powershell
+$env:DORI_RUNTIME = 'hc'
 irm https://raw.githubusercontent.com/useonmn/win-dori/main/install.ps1 | iex
 ```
 
-Aus einem Checkout von [useonmn/win-dori](https://github.com/useonmn/win-dori) geht stattdessen `.\install.ps1`. Das Skript installiert git per winget, wenn git fehlt, und bun und herdr (oder hc, wenn hc die gewählte Laufzeit ist) mit ihren offiziellen Installern. Es klont win-dori nach `%USERPROFILE%\.dori\src`, verlinkt den Skill als Verzeichnis-Junction nach `%USERPROFILE%\.agents\skills\dori-mode` und legt `dori` in deinen Benutzer-PATH. Danach richtet es das Windows-Profil ein: ein Boot-Skript und eine Aufgabe in der Aufgabenplanung, die deinen Dori bei der Anmeldung startet. Die Messenger-Tokens sind Umgebungsvariablen, wie in der Tabelle oben.
+Aus einem Checkout von [useonmn/win-dori](https://github.com/useonmn/win-dori) geht stattdessen `powershell -ExecutionPolicy Bypass -File .\install.ps1`. Fehlt git, bun oder die Laufzeit, bricht die Installation mit dem Download-Link ab. Das Skript klont win-dori nach `%USERPROFILE%\.dori\src`, verlinkt den Skill als Verzeichnis-Junction nach `%USERPROFILE%\.agents\skills\dori-mode` und legt `dori` in deinen Benutzer-PATH: öffne danach ein neues Terminal, damit `dori` gefunden wird. Danach richtet es das Windows-Profil ein: ein Boot-Skript und eine Aufgabe in der Aufgabenplanung, die deinen Dori bei der Anmeldung startet. Setze `"runtime"` in `%USERPROFILE%\.dori\config.json` auf dieselbe Laufzeit (das kopierte Beispiel sagt `herdr`). Die Messenger-Tokens sind Umgebungsvariablen, wie in der Tabelle oben. Ein Slack-Bot-Token (`xoxb-`) kann senden, aber `dori inbound slack` liest Nachrichten nur mit einem User-Token: Mit einem Bot-Token brauchst du einen eigenen Socket-Mode-Empfänger, den dieses Repo nicht enthält.
 
 ### Dori mode, der Bot, mit dem du redest
 

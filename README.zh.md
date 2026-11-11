@@ -59,13 +59,14 @@ Slack、Discord 和 Telegram 都在 `skills/dori-mode/scripts/src/messenger/` �
 
 ### Windows
 
-在 PowerShell 里：
+先装好 git、Bun 和会话运行时：install.ps1 只检查它们，一个也不安装。安装前在同一个 PowerShell 里选好运行时（这里是 `'hc'`，用 herdr 则写 `'herdr'`）：
 
 ```powershell
+$env:DORI_RUNTIME = 'hc'
 irm https://raw.githubusercontent.com/useonmn/win-dori/main/install.ps1 | iex
 ```
 
-在 [useonmn/win-dori](https://github.com/useonmn/win-dori) 的 checkout 里则运行 `.\install.ps1`。缺 git 时它用 winget 安装 git，bun 和 herdr（选的运行时是 hc 时则是 hc）用各自的官方安装程序安装。它把 win-dori 克隆到 `%USERPROFILE%\.dori\src`，把 skill 以目录联接链接到 `%USERPROFILE%\.agents\skills\dori-mode`，并把 `dori` 放进用户 PATH。然后放置 Windows 配置：一个启动脚本，以及一个在你登录时启动 Dori 的任务计划程序任务。消息工具的 token 和上表一样用环境变量设置。
+在 [useonmn/win-dori](https://github.com/useonmn/win-dori) 的 checkout 里则运行 `powershell -ExecutionPolicy Bypass -File .\install.ps1`。缺 git、bun 或运行时，安装会停下并给出下载链接。它把 win-dori 克隆到 `%USERPROFILE%\.dori\src`，把 skill 以目录联接链接到 `%USERPROFILE%\.agents\skills\dori-mode`，并把 `dori` 放进用户 PATH：装完后打开一个新终端，才能找到 `dori`。然后放置 Windows 配置：一个启动脚本，以及一个在你登录时启动 Dori 的任务计划程序任务。把 `%USERPROFILE%\.dori\config.json` 里的 `"runtime"` 也设成同一个运行时（复制来的示例写的是 `herdr`）。消息工具的 token 和上表一样用环境变量设置。Slack 机器人 token（`xoxb-`）可以发送，但 `dori inbound slack` 只能用用户 token 读取消息：用机器人 token 需要另外的 Socket Mode 接收程序，本仓库不包含。
 
 ### Dori mode，你对话的那个 bot
 
