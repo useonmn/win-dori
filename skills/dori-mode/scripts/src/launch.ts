@@ -148,9 +148,7 @@ const startLane = async (
   let ref: SessionRef;
   try {
     // The lane reports into this home: the skill resolves only these two, never DORI_HOME (#197).
-    // The core's env is not the launcher's: the token file's path (never the token, #200) makes the lane post as this
-    // home's bot.
-    const env: Record<string, string> = {
+    const env = {
       DORI_CONFIG: configPath(),
       DORI_STATE_DIR: deps.config.stateDir,
       ...laneTokenEnv(process.env, configPath()),
