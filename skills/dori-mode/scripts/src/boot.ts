@@ -8,6 +8,7 @@ import { reconcilePanes } from "./reconcile.ts";
 import { runtimesOf } from "./run.ts";
 import { listSessions } from "./sessions.ts";
 import { ReportError, type Reports } from "./reports.ts";
+import { slackToken, TokenFileError } from "./slack-token.ts";
 import type { Worklog } from "./worklog.ts";
 import { worklogLines } from "./worklog-render.ts";
 
@@ -37,6 +38,21 @@ export const slackAuthCheck =
     )
       throw new Error("auth.test returned no user_id or team_id");
     return { userId: auth["user_id"], teamId: auth["team_id"] };
+  };
+
+/**
+ * The boot Slack step from the environment: the token is read inside the step, so a bad token file throws
+ * TokenFileError there and boot reports it as a failed check instead of exiting before the other checks.
+ */
+export const envSlackCheck =
+  (
+    client: (token: string) => Pick<Slack, "call">,
+    env: Readonly<Record<string, string | undefined>> = process.env,
+    platform: string = process.platform,
+  ): SlackCheck =>
+  async () => {
+    const token = slackToken(env, platform);
+    return await slackAuthCheck(token ? client(token) : null)();
   };
 
 /**
@@ -186,9 +202,10 @@ export const bootCheck = async (deps: BootDeps): Promise<{ exitCode: number; lin
           ? `SLACK authenticated user=${auth.userId} team=${auth.teamId} (auth.test only; inbox delivery unverified)`
           : "SLACK skipped (DORI_SLACK_TOKEN not set)",
       );
-  } catch {
+  } catch (e) {
     failed = true;
-    lines.push("SLACK auth failed");
+    // A token file error names the path, never the value; any other error may carry provider text, so it is not shown.
+    lines.push(e instanceof TokenFileError ? `SLACK token-file: ${e.message}` : "SLACK auth failed");
   } finally {
     clearTimeout(timer);
   }
