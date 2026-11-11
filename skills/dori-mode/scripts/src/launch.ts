@@ -32,12 +32,22 @@ export class LaunchError extends Error {}
 
 const STARTUP_FAILURE =
   /Cannot find module|All fallback models failed|No API key|model_not_available|usage limit|rate limit|quota|Session crashed|unknown provider/i;
+// omo warns about an extension it cannot load ("Failed to load extension ...: Cannot find module ...") and starts
+// anyway, so those lines are no start failure.
+const startupFailure = (screen: string): RegExpExecArray | null =>
+  STARTUP_FAILURE.exec(
+    screen
+      .split("\n")
+      .filter((line) => !/Failed to load extension/i.test(line))
+      .join("\n"),
+  );
 // `goalMarker` is the agent's status text while a goal is active (omo: `Pursuing goal`). A lane that starts but never
 // sets its goal stops after its first turn, so a ready status alone is not a good start. The status line shares its row
 // with other extensions' status text, so the marker is matched in the footer (the last lines), never in agent output
 // that quotes it. An empty marker turns the check off. The footer is cut to the pane's width (a narrow pane shows
 // "Pur..."), so omo's own goal record for the lane's session counts too, whatever the width (#122).
-const GOAL_CHECKS = 6;
+// On a busy host omo can take over two minutes to begin its first turn, and its argv prompt still arrives then.
+const GOAL_CHECKS = 16;
 const goalShown = (screen: string, marker: string): boolean =>
   screen
     .split("\n")
@@ -172,25 +182,36 @@ const startLane = async (
   const started = deps.clock.now();
   await deps.clock.sleep(20_000);
   const screen = await readScreen(rts, ref, 40);
-  const bad = STARTUP_FAILURE.exec(screen);
+  const bad = startupFailure(screen);
   if (bad) return { lane, startup: `STARTUP_ERROR ${input.key} ${pane}: ${bad[0]}` };
   const { status, error } = await statusLookup(rts, ref);
-  if (status === "idle" || status === "working") {
+  const ready = (s: string | undefined): boolean => s === "idle" || s === "working";
+  // No status and no lookup error is an agent that has not come up yet: it is waited for like a missing goal.
+  if (ready(status) || (status === undefined && !error)) {
     const marker = deps.config.goalMarker;
     const hasGoal = (shown: string): boolean =>
       goalShown(shown, marker) || laneGoalActive(deps.config.sessionsDir, cwd, input.key, started);
     let shown = screen;
-    for (let check = 0; marker && !hasGoal(shown); check++) {
-      if (check === GOAL_CHECKS)
-        return {
-          lane,
-          startup: `STARTUP_NO_GOAL ${input.key} ${pane}: the agent is running but shows no goal after ${Math.round((deps.clock.now() - started) / 1000)} s; last lines: ${lastLines(shown)}`,
-        };
+    let current = status;
+    for (let check = 0; !ready(current) || (marker && !hasGoal(shown)); check++) {
+      if (check === GOAL_CHECKS) {
+        const waited = Math.round((deps.clock.now() - started) / 1000);
+        return ready(current)
+          ? {
+              lane,
+              startup: `STARTUP_NO_GOAL ${input.key} ${pane}: the agent is running but shows no goal after ${waited} s; last lines: ${lastLines(shown)}`,
+            }
+          : {
+              lane,
+              startup: `STARTUP_UNCONFIRMED ${input.key} ${pane}: no ready agent status (none) after ${waited} s; last lines: ${lastLines(shown)}`,
+            };
+      }
       await deps.clock.sleep(10_000);
       shown = await readScreen(rts, ref, 40);
       // The goal is only good news while the agent is still running: re-check the status on every re-read.
       const again = await statusLookup(rts, ref);
-      if (again.status !== "idle" && again.status !== "working") {
+      current = again.status;
+      if (again.error || (current !== undefined && !ready(current))) {
         const lost = again.error
           ? `status lookup failed: ${again.error}`
           : `agent status became ${again.status ?? "none"}`;
@@ -201,7 +222,7 @@ const startLane = async (
       }
       // A late failure stops the agent. A working agent's own output may quote these phrases (a file or log it reads),
       // so only an idle agent with no goal is checked for one.
-      const failed = again.status === "idle" && !hasGoal(shown) ? STARTUP_FAILURE.exec(shown) : null;
+      const failed = current !== "working" && !hasGoal(shown) ? startupFailure(shown) : null;
       if (failed) return { lane, startup: `STARTUP_ERROR ${input.key} ${pane}: ${failed[0]}` };
     }
     return { lane, startup: `STARTUP_OK ${input.key} ${pane}` };

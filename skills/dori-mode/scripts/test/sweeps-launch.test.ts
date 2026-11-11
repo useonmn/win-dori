@@ -105,11 +105,27 @@ test("launch reports STARTUP_OK only on a ready agent status that shows a goal; 
     "STARTUP_UNCONFIRMED worded-lane w:p9",
   );
   expect(await run("idle", "No API key found\n❯ ", "err-lane")).toBe("STARTUP_ERROR err-lane w:p9: No API key");
+  expect(await run(undefined, "Error: Cannot find module 'x'\n$ ", "module-lane")).toBe(
+    "STARTUP_ERROR module-lane w:p9: Cannot find module",
+  );
+  // omo starts despite an extension it cannot load: its warning is no start failure.
+  const warning = `Warning: Failed to load extension "ext.js": Failed to load extension: Cannot find module '../gone.mjs'`;
+  expect(await run("idle", [`${warning}\n❯ `, `${warning}\n${goal}`], "ext-warning-lane")).toBe(
+    "STARTUP_OK ext-warning-lane w:p9",
+  );
+  // A slow host: no agent status yet at the first check, then the agent comes up and sets its goal.
+  expect(
+    await run(
+      [undefined, undefined, undefined, "idle"],
+      ["PS> & omo", "PS> & omo", "PS> & omo", goal],
+      "slow-start-lane",
+    ),
+  ).toBe("STARTUP_OK slow-start-lane w:p9");
   expect(await run("blocked", "❯ ", "blocked-lane")).toStartWith("STARTUP_UNCONFIRMED blocked-lane w:p9");
   expect(await run("done", "❯ ", "done-lane")).toStartWith("STARTUP_UNCONFIRMED done-lane w:p9");
 });
 
-test("STARTUP_NO_GOAL names the time the launch really waited, not the planned 80 s", async () => {
+test("STARTUP_NO_GOAL names the time the launch really waited, not the planned 180 s", async () => {
   // Given a host where every sleep overruns by 5 s, and an agent that never shows a goal.
   const brief = join(state.dir, "brief.md");
   writeFileSync(brief, "# brief\n");
@@ -146,9 +162,9 @@ test("STARTUP_NO_GOAL names the time the launch really waited, not the planned 8
       return inner(argv);
     },
   };
-  // When the launch gives up on the goal; then the message gives the 20 s check plus six 10 s re-reads, each 5 s late.
+  // When the launch gives up on the goal; then the message gives the 20 s check plus sixteen 10 s re-reads, each 5 s late.
   const { startup } = await launchLane(deps, { key: "late-lane", title: "t", brief, done: "closed acme/app#3" });
-  expect(startup).toStartWith("STARTUP_NO_GOAL late-lane w:p9: the agent is running but shows no goal after 115 s;");
+  expect(startup).toStartWith("STARTUP_NO_GOAL late-lane w:p9: the agent is running but shows no goal after 265 s;");
 });
 
 test("launch registers the lane before it starts the agent, so the lane's first dori report is accepted", async () => {
